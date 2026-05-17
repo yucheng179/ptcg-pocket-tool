@@ -1,53 +1,121 @@
-/* 基本網頁設定 */
 body {
-    font-family: sans-serif;
-    background-color: #f5f5f5;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #fafafa;
     margin: 0;
     padding: 20px;
+    color: #333;
 }
 
 header {
     text-align: center;
-    margin-bottom: 30px;
+    margin-bottom: 40px;
 }
 
-/* 畫廊排版 (Grid 魔法在這裡) */
+/* 表單區塊樣式 */
+.form-section {
+    background-color: white;
+    max-width: 500px;
+    margin: 0 auto 40px auto;
+    padding: 25px;
+    border-radius: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    border: 1px solid #eef0f2;
+}
+
+.form-section h2 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 20px;
+    text-align: center;
+}
+
+.input-group {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+}
+
+.input-group label {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #555;
+}
+
+.input-group input, .input-group select {
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    outline: none;
+}
+
+.input-group input:focus, .input-group select:focus {
+    border-color: #007aff;
+}
+
+.btn-submit {
+    width: 100%;
+    padding: 12px;
+    background-color: #007aff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.btn-submit:hover {
+    background-color: #0056b3;
+}
+
+/* 畫廊區塊樣式 */
+.gallery-section h2 {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
 .gallery {
     display: grid;
-    /* 這行會讓卡片自動排版，每張卡片最少 200px 寬，空間夠就會並排 */
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 20px;
     max-width: 1200px;
     margin: 0 auto;
 }
 
-/* 單張卡片的設計 */
+/* 卡片設計 */
 .card {
     background-color: white;
-    border-radius: 12px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    padding: 15px;
+    border-radius: 14px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.04);
+    border: 1px solid #eceff1;
+    padding: 12px;
     text-align: center;
-    transition: transform 0.2s; /* 加入滑鼠游標移過去的動畫 */
+    transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .card:hover {
-    transform: translateY(-5px); /* 滑鼠移過去時卡片會往上浮 */
+    transform: translateY(-4px);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
 }
 
-/* 卡片圖片 */
 .card img {
     width: 100%;
-    border-radius: 8px;
+    aspect-ratio: 2.5 / 3.5;
+    object-cover: cover;
+    border-radius: 10px;
+    background-color: #f0f0f0;
 }
 
 .card h3 {
-    margin: 10px 0 5px 0;
-    color: #333;
+    margin: 12px 0 6px 0;
+    font-size: 16px;
 }
 
 .card p {
-    margin: 0;
-    color: #666;
-    font-size: 14px;
+    margin: 4px 0;
+    color: #777;
+    font-size: 13px;
 }

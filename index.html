@@ -3,21 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的 PTCG Pocket 圖鑑</title>
-    <!-- 連結 CSS 檔案 -->
+    <title>我的 PTCG Pocket 圖鑑管理工具</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <h1>🌟 Pokémon TCG Pocket 圖鑑</h1>
+        <h1>🌟 Pokémon TCG Pocket 圖鑑小工具</h1>
     </header>
     
     <main>
-        <!-- 這個 div 就是我們的畫廊，等一下會用 JS 把卡片塞進這裡 -->
-        <div id="gallery" class="gallery"></div>
+        <section class="form-section">
+            <h2>➕ 新增卡片到圖鑑</h2>
+            <form id="card-form">
+                <div class="input-group">
+                    <label for="card-id">卡片編號：</label>
+                    <input type="text" id="card-id" placeholder="例如: A1-001" required>
+                </div>
+                <div class="input-group">
+                    <label for="card-name">寶可夢名稱：</label>
+                    <input type="text" id="card-name" placeholder="例如: 妙蛙種子" required>
+                </div>
+                <div class="input-group">
+                    <label for="card-type">屬性：</label>
+                    <select id="card-type">
+                        <option value="草">草</option>
+                        <option value="火">火</option>
+                        <option value="水">水</option>
+                        <option value="雷">雷</option>
+                        <option value="超">超</option>
+                        <option value="鬥">鬥</option>
+                        <option value="惡">惡</option>
+                        <option value="鋼">鋼</option>
+                        <option value="龍">龍</option>
+                        <option value="一般">一般</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="card-img">圖片網址：</label>
+                    <input type="url" id="card-img" placeholder="請貼上卡片圖片的 URL 連結" required>
+                </div>
+                <button type="submit" class="btn-submit">加入我的圖鑑</button>
+            </form>
+        </section>
+
+        <section class="gallery-section">
+            <h2>🗃️ 我的收藏畫廊</h2>
+            <div id="gallery" class="gallery"></div>
+        </section>
     </main>
 
-    <!-- 連結 JS 檔案 (通常放在 body 的最底下) -->
     <script src="script.js"></script>
 </body>
 </html>

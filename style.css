@@ -1,0 +1,53 @@
+/* 基本網頁設定 */
+body {
+    font-family: sans-serif;
+    background-color: #f5f5f5;
+    margin: 0;
+    padding: 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+/* 畫廊排版 (Grid 魔法在這裡) */
+.gallery {
+    display: grid;
+    /* 這行會讓卡片自動排版，每張卡片最少 200px 寬，空間夠就會並排 */
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* 單張卡片的設計 */
+.card {
+    background-color: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    padding: 15px;
+    text-align: center;
+    transition: transform 0.2s; /* 加入滑鼠游標移過去的動畫 */
+}
+
+.card:hover {
+    transform: translateY(-5px); /* 滑鼠移過去時卡片會往上浮 */
+}
+
+/* 卡片圖片 */
+.card img {
+    width: 100%;
+    border-radius: 8px;
+}
+
+.card h3 {
+    margin: 10px 0 5px 0;
+    color: #333;
+}
+
+.card p {
+    margin: 0;
+    color: #666;
+    font-size: 14px;
+}

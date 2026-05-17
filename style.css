@@ -116,6 +116,9 @@ header {
 
 .card p {
     margin: 4px 0;
-    color: #777;
+    color: #555; /* 顏色稍微調深一點點 */
     font-size: 13px;
+    display: flex; /* 讓內容左右對齊 */
+    justify-content: space-between; 
+    padding: 0 10px;
 }

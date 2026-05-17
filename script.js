@@ -1,40 +1,47 @@
-// 1. 初始化資料：先檢查瀏覽器有沒有存過卡片，沒有的話就用兩張預設卡片
+// 1. 初始化資料：更新為包含類型、稀有度、屬性的新格式
 const defaultCards = [
     {
-        id: "A1-001",
         name: "妙蛙種子",
-        type: "草",
-        imageUrl: "https://cdn.raenonx.cc/api/image/ptcgp?format=webp&url=/images/game/card/full/zh/PK_10_000010_00.png&w=1920&q=75"
+        cardType: "寶可夢",  // 新增
+        rarity: "1菱",      // 新增
+        id: "A1-001",
+        property: "草",     // 從 type 改成 property
+        imageUrl: "https://wsrv.nl/?url=raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/1.png&w=300"
     },
     {
-        id: "A1-004",
         name: "小火龍",
-        type: "火",
-        imageUrl: "https://cdn.raenonx.cc/api/image/ptcgp?format=webp&url=/images/game/card/full/zh/PK_10_000330_00.png&w=1920&q=75"
+        cardType: "寶可夢",  // 新增
+        rarity: "1菱",      // 新增
+        id: "A1-004",
+        property: "火",     // 從 type 改成 property
+        imageUrl: "https://wsrv.nl/?url=raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/4.png&w=300"
     }
 ];
 
 // 從 localStorage 拿資料，如果沒有就用預設的
-let myCards = JSON.parse(localStorage.getItem("ptcg_cards")) || defaultCards;
+let myCards = JSON.parse(localStorage.getItem("ptcg_cards_v2")) || defaultCards; 
+// 💡 小技巧：我把 localStorage 的名字改成了 ptcg_cards_v2，這樣可以避免讀到你之前舊格式的資料而發生錯誤。
 
 // 2. 抓取 HTML 元素
 const galleryElement = document.getElementById("gallery");
 const cardForm = document.getElementById("card-form");
 
-// 3. 定義一個「把資料畫到畫面上」的函式
+// 3. 定義「把資料畫到畫面上」的函式
 function renderGallery() {
-    // 先清空畫廊，避免重複渲染
     galleryElement.innerHTML = "";
 
-    // 跑迴圈把每一張卡片畫出來
     myCards.forEach(card => {
         const cardElement = document.createElement("div");
         cardElement.className = "card";
+        
+        // 將新增的屬性加入到卡片的顯示畫面中
         cardElement.innerHTML = `
             <img src="${card.imageUrl}" alt="${card.name}" onerror="this.src='https://placehold.co/250x350?text=No+Image'">
             <h3>${card.name}</h3>
-            <p>編號: ${card.id}</p>
-            <p>屬性: ${card.type}</p>
+            <p><span>編號:</span> <span>${card.id}</span></p>
+            <p><span>類型:</span> <span>${card.cardType}</span></p>
+            <p><span>屬性:</span> <span>${card.property}</span></p>
+            <p><span>稀有度:</span> <strong>${card.rarity}</strong></p>
         `;
         galleryElement.appendChild(cardElement);
     });
@@ -42,27 +49,27 @@ function renderGallery() {
 
 // 4. 監聽表單的「送出 (Submit)」事件
 cardForm.addEventListener("submit", function(event) {
-    // 阻止表單預設的重整網頁行為
     event.preventDefault();
 
-    // 抓取使用者在輸入框填寫的數值
+    // 抓取你新設定的 id 裡面的值
     const newCard = {
-        id: document.getElementById("card-id").value,
         name: document.getElementById("card-name").value,
-        type: document.getElementById("card-type").value,
+        cardType: document.getElementById("card-type").value,     // 新增
+        rarity: document.getElementById("card-rarity").value,     // 新增
+        id: document.getElementById("card-id").value,
+        property: document.getElementById("card-property").value, // 更新 ID
         imageUrl: document.getElementById("card-img").value
     };
 
-    // 把新卡片推進我們的資料陣列中
     myCards.push(newCard);
 
-    // 把更新後的陣列存進 localStorage 永久保存
-    localStorage.setItem("ptcg_cards", JSON.stringify(myCards));
+    // 存入 localStorage
+    localStorage.setItem("ptcg_cards_v2", JSON.stringify(myCards));
 
     // 重新渲染畫面
     renderGallery();
 
-    // 清空輸入框，方便下一次輸入
+    // 清空輸入框
     cardForm.reset();
 });
 

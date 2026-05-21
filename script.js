@@ -1,54 +1,118 @@
-const galleryElement = document.getElementById("gallery");
-
-// 這是 flibustier 專案提供的最新 JSON 遠端原始檔網址
-const DB_URL = "https://raw.githubusercontent.com/flibustier/pokemon-tcg-pocket-database/main/dist/cards.min.json";
-
-// 定義一個非同步函式：去網路上把 JSON 抓下來
-async function loadDatabase() {
-    try {
-        // 發送請求並等待回應
-        const response = await fetch(DB_URL);
-        const cardsData = await response.json();
-        
-        // 這個資料庫有幾百張卡片，為避免一次載入太多畫面卡頓，我們用 slice 先示範前 50 張
-        renderGallery(cardsData.slice(0, 50)); 
-    } catch (error) {
-        console.error("讀取資料失敗:", error);
-        galleryElement.innerHTML = "<p style='text-align:center; color:red;'>讀取資料庫失敗，請確認網路連線。</p>";
+// 1. 初始化資料 (加入 page 屬性)
+const defaultCards = [
+    {
+        name: "傑尼龜",
+        id: "A1-007",
+        imageUrl: "https://wsrv.nl/?url=raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/7.png&w=300",
+        page: "page1" // 標記這張卡屬於 page1
     }
-}
+];
 
-// 畫出卡片的函式 (屬性對應到 flibustier 的格式)
-function renderGallery(cards) {
-    // 清空載入中的文字
+let myCards = JSON.parse(localStorage.getItem("ptcg_cards_v4")) || defaultCards;
+let currentPage = "page1"; // 預設停留在第一個頁面
+
+// 抓取 DOM 元素
+const galleryElement = document.getElementById("gallery");
+const formModal = document.getElementById("form-modal");
+const cardForm = document.getElementById("card-form");
+const sidebarItems = document.querySelectorAll(".sidebar-menu li");
+const pageTitle = document.getElementById("page-title");
+const imgInput = document.getElementById("card-img");
+const imgPreview = document.getElementById("img-preview");
+
+// 2. 渲染畫廊
+function renderGallery() {
     galleryElement.innerHTML = "";
 
-    cards.forEach(card => {
+    // 關鍵邏輯：只篩選出屬於「當前頁面」的卡片
+    const currentCards = myCards.filter(card => card.page === currentPage);
+
+    currentCards.forEach(card => {
         const cardElement = document.createElement("div");
         cardElement.className = "card";
-        
-        // 1. 處理卡片編號：資料庫是分開的，我們把它組合成 "A1-1" 的格式
-        const cardNumber = `${card.set}-${card.number}`;
-        
-        // 2. 處理圖片：
-        // ⚠️ 注意：該資料庫的 image 欄位只有檔名 (例如 bulbasaur.webp)，並沒有提供完整的圖片網址。
-        // 所以我們在這裡先用一個「會顯示卡片名字的佔位圖 (Placeholder)」暫時代替。
-        const imageUrl = `https://placehold.co/250x350/eaeaea/555555?text=${card.name}`;
-
-        // 3. 把 flibustier 提供的屬性畫出來
-        // (如果有些卡片沒有血量，我們用 || '-' 來給個預設值)
         cardElement.innerHTML = `
-            <img src="${imageUrl}" alt="${card.name}">
+            <img src="${card.imageUrl}" alt="${card.name}" onerror="this.src='https://placehold.co/250x350/eaeaea/888888?text=No+Image'">
             <h3>${card.name}</h3>
-            <p><span>編號:</span> <span>${cardNumber}</span></p>
-            <p><span>類型:</span> <span>${card.type || '無'}</span></p>
-            <p><span>屬性:</span> <span>${card.element || '無'}</span></p>
-            <p><span>HP:</span> <span>${card.health || '-'}</span></p>
-            <p><span>稀有度:</span> <strong>${card.rarity || '無'}</strong></p>
+            <p style="color: #666; font-size: 13px; margin: 4px 0;">編號: ${card.id}</p>
         `;
         galleryElement.appendChild(cardElement);
     });
+
+    // 💡 在最後加上 Notion 風格的 "+ New page" 按鈕
+    const addNewElement = document.createElement("div");
+    addNewElement.className = "add-new-card";
+    addNewElement.innerHTML = `
+        <span>➕</span>
+        <div style="font-size: 14px; font-weight: bold;">New page</div>
+    `;
+    
+    // 點擊新增按鈕時，打開 Modal 彈出視窗
+    addNewElement.addEventListener("click", () => {
+        formModal.classList.add("show");
+    });
+    
+    galleryElement.appendChild(addNewElement);
 }
 
-// 網頁一打開，立刻執行抓取資料的動作
-loadDatabase();
+// 3. 側邊欄切換邏輯
+sidebarItems.forEach(item => {
+    item.addEventListener("click", function() {
+        // 移除所有選單的 active 樣式，並加到被點擊的選項上
+        sidebarItems.forEach(li => li.classList.remove("active"));
+        this.classList.add("active");
+        
+        // 更新目前頁面變數與標題
+        currentPage = this.getAttribute("data-page");
+        pageTitle.innerText = "🌟 " + this.innerText;
+        
+        // 重新渲染畫廊
+        renderGallery();
+    });
+});
+
+// 4. Modal 與表單邏輯
+// 點擊 X 關閉視窗
+document.getElementById("close-modal").addEventListener("click", () => {
+    formModal.classList.remove("show");
+});
+
+// 點擊視窗外的黑色半透明區域也能關閉
+window.addEventListener("click", (e) => {
+    if (e.target === formModal) {
+        formModal.classList.remove("show");
+    }
+});
+
+// 即時圖片預覽：監聽網址輸入框的改變
+imgInput.addEventListener("input", function() {
+    const url = this.value.trim();
+    if (url) {
+        imgPreview.src = url;
+    } else {
+        imgPreview.src = "https://placehold.co/250x350/eaeaea/888888?text=Preview";
+    }
+});
+
+// 送出表單
+cardForm.addEventListener("submit", function(event) {
+    event.preventDefault();
+
+    const newCard = {
+        name: document.getElementById("card-name").value,
+        id: document.getElementById("card-id").value,
+        imageUrl: document.getElementById("card-img").value,
+        page: currentPage // 紀錄這張卡片是被新增到哪一個分類中
+    };
+
+    myCards.push(newCard);
+    localStorage.setItem("ptcg_cards_v4", JSON.stringify(myCards));
+    
+    // 關閉視窗、重新渲染畫面、重置表單與預覽圖
+    formModal.classList.remove("show");
+    renderGallery();
+    cardForm.reset();
+    imgPreview.src = "https://placehold.co/250x350/eaeaea/888888?text=Preview";
+});
+
+// 網頁開啟時第一次渲染
+renderGallery();

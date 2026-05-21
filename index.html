@@ -3,23 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的 PTCG Pocket 完整圖鑑</title>
+    <title>我的 PTCG Pocket 專業圖鑑</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header>
-        <h1>🌟 Pokémon TCG Pocket 完整圖鑑</h1>
-        <p style="color: #666;">資料來源：flibustier 開源資料庫</p>
-    </header>
-    
-    <main>
-        <section class="gallery-section">
-            <div id="gallery" class="gallery">
-                <!-- 這裡先放一個載入中的提示，資料抓到後會被蓋掉 -->
-                <p style="text-align: center; width: 100%;">資料正在從 GitHub 讀取中，請稍後...</p>
+    <div class="app-layout">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>🗂️ 圖鑑分類</h2>
             </div>
-        </section>
-    </main>
+            <ul id="sidebar-menu" class="sidebar-menu">
+                <li class="active" data-page="page1">超夢擴充包</li>
+                <li data-page="page2">噴火龍擴充包</li>
+                <li data-page="page3">皮卡丘擴充包</li>
+                <li data-page="page4">支援者卡片</li>
+                <li data-page="page5">物品與道具</li>
+                <li data-page="page6">我的牌組</li>
+                <li data-page="page7">願望清單</li>
+            </ul>
+        </aside>
+
+        <main class="main-content">
+            <header>
+                <h1 id="page-title">🌟 超夢擴充包</h1>
+            </header>
+            
+            <section class="gallery-section">
+                <div id="gallery" class="gallery"></div>
+            </section>
+        </main>
+    </div>
+
+    <div id="form-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-modal">&times;</span>
+            <h2>➕ 新增卡片</h2>
+            <form id="card-form">
+                <div class="input-group">
+                    <label for="card-name">寶可夢名稱：</label>
+                    <input type="text" id="card-name" placeholder="例如: 傑尼龜" required>
+                </div>
+                <div class="input-group">
+                    <label for="card-id">卡片編號：</label>
+                    <input type="text" id="card-id" placeholder="例如: A1-007" required>
+                </div>
+                <div class="input-group">
+                    <label for="card-img">圖片網址：</label>
+                    <input type="url" id="card-img" placeholder="請貼上圖片 URL" required>
+                </div>
+                <div class="preview-container">
+                    <p style="font-size: 14px; font-weight: bold; margin-bottom: 5px;">圖片預覽：</p>
+                    <img id="img-preview" src="https://placehold.co/250x350/eaeaea/888888?text=Preview" alt="預覽圖">
+                </div>
+                <button type="submit" class="btn-submit">加入本頁</button>
+            </form>
+        </div>
+    </div>
 
     <script src="script.js"></script>
 </body>

@@ -1,124 +1,114 @@
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #fafafa;
     margin: 0;
-    padding: 20px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: #f5f7f9;
     color: #333;
 }
 
-header {
-    text-align: center;
-    margin-bottom: 40px;
+/* 整體佈局：滿版高度，左右排列 */
+.app-layout {
+    display: flex;
+    height: 100vh; 
 }
 
-/* 表單區塊樣式 */
-.form-section {
-    background-color: white;
-    max-width: 500px;
-    margin: 0 auto 40px auto;
-    padding: 25px;
-    border-radius: 16px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    border: 1px solid #eef0f2;
-}
-
-.form-section h2 {
-    margin-top: 0;
-    margin-bottom: 20px;
-    font-size: 20px;
-    text-align: center;
-}
-
-.input-group {
-    margin-bottom: 15px;
+/* --- 側邊欄設計 --- */
+.sidebar {
+    width: 250px;
+    background-color: #ffffff;
+    border-right: 1px solid #e0e0e0;
     display: flex;
     flex-direction: column;
 }
 
-.input-group label {
-    font-size: 14px;
-    font-weight: 600;
-    margin-bottom: 6px;
-    color: #555;
+.sidebar-header {
+    padding: 20px;
+    border-bottom: 1px solid #e0e0e0;
 }
 
-.input-group input, .input-group select {
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 14px;
-    outline: none;
+.sidebar-header h2 { margin: 0; font-size: 18px; }
+
+.sidebar-menu {
+    list-style: none; padding: 10px 0; margin: 0;
+    flex: 1; overflow-y: auto;
 }
 
-.input-group input:focus, .input-group select:focus {
-    border-color: #007aff;
+.sidebar-menu li {
+    padding: 12px 20px; cursor: pointer; transition: background 0.2s;
+    font-size: 15px; color: #555;
 }
 
-.btn-submit {
-    width: 100%;
-    padding: 12px;
-    background-color: #007aff;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 16px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background 0.2s;
+.sidebar-menu li:hover { background-color: #f0f0f0; }
+
+.sidebar-menu li.active {
+    background-color: #e6f2ff; color: #007aff;
+    font-weight: bold; border-right: 3px solid #007aff;
 }
 
-.btn-submit:hover {
-    background-color: #0056b3;
-}
-
-/* 畫廊區塊樣式 */
-.gallery-section h2 {
-    text-align: center;
-    margin-bottom: 20px;
+/* --- 主內容區與畫廊 --- */
+.main-content {
+    flex: 1; padding: 30px; overflow-y: auto;
 }
 
 .gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
 }
 
-/* 卡片設計 */
 .card {
-    background-color: white;
-    border-radius: 14px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.04);
-    border: 1px solid #eceff1;
-    padding: 12px;
-    text-align: center;
-    transition: transform 0.2s, box-shadow 0.2s;
+    background-color: white; border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05); padding: 12px;
+    text-align: center; transition: transform 0.2s;
 }
-
-.card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 20px rgba(0,0,0,0.08);
-}
-
+.card:hover { transform: translateY(-4px); }
 .card img {
-    width: 100%;
-    aspect-ratio: 2.5 / 3.5;
-    object-cover: cover;
-    border-radius: 10px;
-    background-color: #f0f0f0;
+    width: 100%; aspect-ratio: 2.5 / 3.5;
+    object-fit: cover; border-radius: 8px;
+}
+.card h3 { margin: 12px 0 6px 0; font-size: 16px; }
+
+/* Notion 風格的新增按鈕 */
+.add-new-card {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    background-color: transparent; border: 2px dashed #cccccc;
+    border-radius: 12px; cursor: pointer;
+    min-height: 250px; color: #888; transition: all 0.2s;
+}
+.add-new-card:hover {
+    background-color: rgba(0,0,0,0.03); border-color: #aaa; color: #555;
+}
+.add-new-card span { font-size: 24px; margin-bottom: 8px; }
+
+/* --- 彈出視窗 (Modal) --- */
+.modal {
+    display: none; /* 預設隱藏 */
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0,0,0,0.5); /* 半透明黑底 */
+    justify-content: center; align-items: center; z-index: 1000;
+}
+.modal.show { display: flex; } /* 顯示時使用 flex 置中 */
+
+.modal-content {
+    background-color: white; padding: 30px; border-radius: 16px;
+    width: 90%; max-width: 400px; position: relative;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
 }
 
-.card h3 {
-    margin: 12px 0 6px 0;
-    font-size: 16px;
+.close-btn {
+    position: absolute; top: 15px; right: 20px;
+    font-size: 24px; cursor: pointer; color: #888;
+}
+.close-btn:hover { color: #333; }
+
+.preview-container { text-align: center; margin-top: 15px; }
+.preview-container img {
+    max-width: 150px; border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1); object-fit: cover;
 }
 
-.card p {
-    margin: 4px 0;
-    color: #555; /* 顏色稍微調深一點點 */
-    font-size: 13px;
-    display: flex; /* 讓內容左右對齊 */
-    justify-content: space-between; 
-    padding: 0 10px;
-}
+/* 表單基礎美化 */
+.input-group { margin-bottom: 15px; }
+.input-group label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: bold;}
+.input-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box;}
+.btn-submit { width: 100%; padding: 12px; background-color: #007aff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 15px;}

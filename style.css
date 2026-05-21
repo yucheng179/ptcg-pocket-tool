@@ -112,3 +112,34 @@ body {
 .input-group label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: bold;}
 .input-group input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box;}
 .btn-submit { width: 100%; padding: 12px; background-color: #007aff; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 16px; font-weight: bold; margin-top: 15px;}
+
+/* --- 動態側邊欄新增的樣式 --- */
+.sidebar-footer {
+    padding: 15px;
+    border-top: 1px solid #e0e0e0;
+}
+
+.btn-secondary {
+    width: 100%; padding: 10px; background-color: #f0f4f8; 
+    color: #007aff; border: 1px dashed #007aff; border-radius: 8px; 
+    cursor: pointer; font-weight: bold; transition: 0.2s;
+}
+
+.btn-secondary:hover { background-color: #e6f2ff; }
+
+/* 讓側邊欄的選項可以左右排開 (文字在左，編輯按鈕在右) */
+.sidebar-menu li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* 隱藏的編輯與刪除按鈕 (滑鼠游標移過去才會顯示) */
+.page-actions { display: none; }
+.sidebar-menu li:hover .page-actions { display: block; }
+
+.page-actions button {
+    background: none; border: none; cursor: pointer;
+    font-size: 14px; opacity: 0.5; padding: 0 4px;
+}
+.page-actions button:hover { opacity: 1; transform: scale(1.1); }

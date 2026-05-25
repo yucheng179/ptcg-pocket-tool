@@ -3,55 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的 PTCG 專屬筆記</title>
+    <title>我的 PTCG Pocket 專業圖鑑</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="app-layout">
         <aside class="sidebar">
             <div class="sidebar-header">
-                <h2>📚 我的工作區</h2>
+                <h2>🗂️ 圖鑑分類</h2>
             </div>
-            <ul id="sidebar-menu" class="sidebar-menu"></ul>
-            <div class="sidebar-footer">
-                <button id="add-page-btn" class="btn-secondary">➕ 新增主頁面</button>
-            </div>
+            <ul id="sidebar-menu" class="sidebar-menu">
+                <li data-target="view-rarity">稀有度</li>
+                <li data-target="view-pack">系列卡包</li>
+                <li data-target="view-meta">Meta卡組</li>
+                <li data-target="view-needed">需要的卡</li>
+                <li data-target="view-2star">二星</li>
+                <li data-target="view-alt-account" class="active">小帳資源</li>
+                <li data-target="view-general">泛用卡</li>
+            </ul>
         </aside>
 
         <main class="main-content">
             <header>
-                <h1 id="page-title">請選擇或建立分類</h1>
-                <span id="page-type-badge" class="badge"></span>
+                <h1 id="page-title">小帳資源</h1>
+                <button id="open-form-btn" class="btn-primary">➕ 新增卡片</button>
             </header>
             
-            <section id="view-gallery" class="gallery-section" style="display: none;">
-                <div id="gallery" class="gallery"></div>
+            <section id="view-alt-account" class="view-section active">
+                <div class="account-tabs">
+                    <button class="tab-btn active" data-acc="小帳">小帳</button>
+                    <button class="tab-btn" data-acc="資源帳">資源帳</button>
+                </div>
+                
+                <div id="matrix-container" class="matrix-container">
+                    </div>
             </section>
 
-            <section id="view-note" class="note-section" style="display: none;">
-                <div id="note-editor" class="rich-text-editor" contenteditable="true" placeholder="在這裡輸入筆記、貼上表格或圖片..."></div>
-            </section>
+            <section id="view-rarity" class="view-section"><p>開發中...</p></section>
+            <section id="view-pack" class="view-section"><p>開發中...</p></section>
+            <section id="view-meta" class="view-section"><p>開發中...</p></section>
+            <section id="view-needed" class="view-section"><p>開發中...</p></section>
+            <section id="view-2star" class="view-section"><p>開發中...</p></section>
+            <section id="view-general" class="view-section"><p>開發中...</p></section>
         </main>
     </div>
 
     <div id="form-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" id="close-modal">&times;</span>
-            <h2>➕ 新增卡片</h2>
+            <h2>➕ 新增卡片資料</h2>
             <form id="card-form">
                 <div class="input-group">
-                    <label for="card-name">寶可夢名稱：</label>
-                    <input type="text" id="card-name" placeholder="例如: 傑尼龜" required>
+                    <label>寶可夢名稱：</label>
+                    <input type="text" id="card-name" required>
                 </div>
                 <div class="input-group">
-                    <label for="card-id">卡片編號：</label>
-                    <input type="text" id="card-id" placeholder="例如: A1-007" required>
+                    <label>卡片編號：</label>
+                    <input type="text" id="card-id" placeholder="例如: A1-001" required>
                 </div>
                 <div class="input-group">
-                    <label for="card-img">圖片網址：</label>
-                    <input type="url" id="card-img" placeholder="請貼上圖片 URL" required>
+                    <label>圖片網址：</label>
+                    <input type="url" id="card-img" required>
                 </div>
-                <button type="submit" class="btn-submit">加入本頁</button>
+                <div class="input-group">
+                    <label>所屬帳號 (Group 1)：</label>
+                    <select id="card-acc-type">
+                        <option value="小帳">小帳</option>
+                        <option value="資源帳">資源帳</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>稀有度 (Sub-group)：</label>
+                    <select id="card-rarity">
+                        <option value="4菱">4菱</option>
+                        <option value="1星">1星</option>
+                        <option value="2星">2星</option>
+                        <option value="1彩星">1彩星</option>
+                        <option value="2彩星">2彩星</option>
+                        <option value="3星&皇冠">3星&皇冠</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>主帳是否有？：</label>
+                    <select id="card-has-main">
+                        <option value="false">主帳沒有的</option>
+                        <option value="true">主帳有的</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%">儲存</button>
             </form>
         </div>
     </div>

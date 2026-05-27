@@ -1,8 +1,6 @@
-// 🪄 1. 從 Firebase 載入工具包
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
-import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 
-// 🪄 2. 你的專屬 Firebase 金鑰
 const firebaseConfig = {
   apiKey: "AIzaSyBdT8oG7bjqOIZlnjEvkoxBz1GTlTx4s-k",
   authDomain: "ptcg-pocket-dex-1ac80.firebaseapp.com",
@@ -12,18 +10,16 @@ const firebaseConfig = {
   appId: "1:104827060691:web:5de9e363eb31d7e4822f26"
 };
 
-// 🪄 3. 啟動資料庫
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const cardsCollection = collection(db, "ptcg_cards"); 
 
-// 本地暫存陣列 (從雲端抓下來放這裡)
 let cardsData = [];
+let currentSection = "alt_acc"; 
 let currentAccountTab = "小帳";
-let editingCardDocId = null; // 雲端資料庫的專屬 ID
+let editingCardDocId = null; 
 
-// 你的圖示庫
-const rarities = [
+const raritiesAlt = [
     { name: "4菱", icon: "https://img.game8.co/3995617/622e1c0cca9ffdaa43cdd588b8e18d78.png/show" },
     { name: "1星", icon: "https://img.game8.co/3994721/895579e1516f605b7882b0909f329b7e.png/show" },
     { name: "2星", icon: "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show" },
@@ -33,7 +29,15 @@ const rarities = [
     { name: "皇冠", icon: "https://img.game8.co/3997607/303598e292a532bcde37ab527a0ac263.png/show" }
 ];
 
-const rarityRowsContainer = document.getElementById("rarity-rows-container");
+const rarities24h = [
+    { name: "3菱", icon: "https://img.game8.co/3994728/d0cbe26800d9abdfccddbbfd5aeab3e5.png/show" }, 
+    { name: "4菱", icon: "https://img.game8.co/3995617/622e1c0cca9ffdaa43cdd588b8e18d78.png/show" },
+    { name: "1星", icon: "https://img.game8.co/3994721/895579e1516f605b7882b0909f329b7e.png/show" },
+    { name: "2星", icon: "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show" }
+];
+
+const rarityRowsContainerAlt = document.getElementById("rarity-rows-container");
+const rarityRowsContainer24h = document.getElementById("rarity-rows-24h-container");
 const accTabs = document.querySelectorAll(".tab-btn");
 const formModal = document.getElementById("form-modal");
 const cardForm = document.getElementById("card-form");
@@ -41,66 +45,180 @@ const modalTitle = document.getElementById("modal-title");
 const colorSwatches = document.querySelectorAll(".color-swatch");
 const colorInput = document.getElementById("card-bgcolor");
 
-// 🪄 4. 向雲端索取資料
-async function fetchCardsFromCloud() {
-    rarityRowsContainer.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>📡 正在與雲端資料庫連線中...</p>";
-    
-    const snapshot = await getDocs(cardsCollection);
-    cardsData = snapshot.docs.map(doc => ({
-        docId: doc.id,
-        ...doc.data()
-    }));
-    
-    renderRarityRows();
+// ==========================================
+// 視圖切換
+// ==========================================
+const navAltAcc = document.getElementById("nav-alt-acc");
+const nav24h = document.getElementById("nav-24h-challenge");
+const viewAltAcc = document.getElementById("view-alt-acc");
+const view24h = document.getElementById("view-24h-challenge");
+const pageTitle = document.getElementById("page-title");
+
+navAltAcc.addEventListener("click", () => {
+    currentSection = "alt_acc";
+    navAltAcc.classList.add("active");
+    nav24h.classList.remove("active");
+    viewAltAcc.style.display = "block";
+    view24h.style.display = "none";
+    pageTitle.innerText = "小帳資源";
+    renderAllViews();
+});
+
+nav24h.addEventListener("click", () => {
+    currentSection = "24h";
+    nav24h.classList.add("active");
+    navAltAcc.classList.remove("active");
+    view24h.style.display = "block";
+    viewAltAcc.style.display = "none";
+    pageTitle.innerText = "24H得卡挑戰";
+    renderAllViews();
+});
+
+// ==========================================
+// 渲染邏輯
+// ==========================================
+function renderAllViews() {
+    if (currentSection === "alt_acc") {
+        renderAltAccRows();
+    } else if (currentSection === "24h") {
+        render24hRows();
+    }
 }
 
-function renderRarityRows() {
-    rarityRowsContainer.innerHTML = "";
-
-    rarities.forEach(rarity => {
-        const targetCards = cardsData.filter(c => c.accountType === currentAccountTab && c.rarity === rarity.name);
-        
+function renderAltAccRows() {
+    rarityRowsContainerAlt.innerHTML = "";
+    raritiesAlt.forEach(rarity => {
+        const targetCards = cardsData.filter(c => c.section === "alt_acc" && c.altAccData?.accountType === currentAccountTab && c.rarity === rarity.name);
         const rowBlock = document.createElement("div");
         rowBlock.className = "rarity-row-block";
-
         rowBlock.innerHTML = `
             <div class="rarity-header">
                 <img src="${rarity.icon}" alt="${rarity.name}">
                 <span>${rarity.name}</span>
             </div>
         `;
-
-        createHorizontalRow(rowBlock, targetCards, "false", "主帳沒有的", "not-on-main", rarity.name);
-        createHorizontalRow(rowBlock, targetCards, "true", "主帳有的", "on-main", rarity.name);
-
-        rarityRowsContainer.appendChild(rowBlock);
+        createHorizontalRowAlt(rowBlock, targetCards, "false", "主帳沒有的", "not-on-main", rarity.name);
+        createHorizontalRowAlt(rowBlock, targetCards, "true", "主帳有的", "on-main", rarity.name);
+        rarityRowsContainerAlt.appendChild(rowBlock);
     });
 }
 
-function createHorizontalRow(parentBlock, cards, hasMainVal, labelText, className, rarityName) {
+function render24hRows() {
+    rarityRowsContainer24h.innerHTML = "";
+    rarities24h.forEach(rarity => {
+        const targetCards = cardsData.filter(c => c.section === "24h" && c.rarity === rarity.name);
+        
+        const ownedCount = targetCards.filter(c => c.computedOwnership && c.computedOwnership !== "無").length;
+        
+        const rowBlock = document.createElement("div");
+        rowBlock.className = "rarity-row-block";
+        rowBlock.innerHTML = `
+            <div class="rarity-header">
+                <img src="${rarity.icon}" alt="${rarity.name}">
+                <span>${rarity.name} <span class="rarity-count">${ownedCount} / ${targetCards.length}</span></span>
+            </div>
+        `;
+
+        const cardsListDiv = document.createElement("div");
+        cardsListDiv.className = "cards-horizontal-list";
+        cardsListDiv.style.padding = "15px";
+        cardsListDiv.style.backgroundColor = "#fafafa";
+        cardsListDiv.style.borderRadius = "8px";
+        cardsListDiv.style.border = "1px solid #e8e8e8";
+
+        targetCards.sort((a, b) => (a.id || "").localeCompare(b.id || "")).forEach(card => {
+            const cardEl = document.createElement("div");
+            cardEl.className = "card-box";
+            
+            let ownershipState = card.computedOwnership;
+            let autoBgColor = "#FFB7B2"; // 淡紅
+            
+            if (ownershipState === "取得") {
+                autoBgColor = "#D2EEA5"; // 淡綠
+            } else if (ownershipState === "小帳" || ownershipState === "資源帳") {
+                autoBgColor = "#FFFFBE"; // 淡黃
+            }
+            cardEl.style.backgroundColor = autoBgColor;
+
+            const displayImg = card.imageUrl ? card.imageUrl : "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
+            const displayName = card.name ? card.name : "<span style='color:#ccc'>(未命名)</span>";
+            const displayId = card.id ? `# ${card.id}` : "<span style='color:#ccc'>(無編號)</span>";
+
+            cardEl.innerHTML = `
+                <button class="toggle-main-btn" title="切換取得狀態">🔄</button>
+                <img src="${displayImg}" onerror="this.src='https://placehold.co/150x210/eaeaea/999999?text=Error'">
+                <div class="card-info">
+                    <strong>${displayName}</strong>
+                    ${displayId}
+                    <div style="margin-top: 6px; font-weight: bold; color: #555; padding-top: 4px; border-top: 1px dashed #ccc;">
+                        狀態: ${ownershipState}
+                    </div>
+                </div>
+                <button class="del-card-btn" title="刪除卡片">✕</button>
+                <button class="copy-card-btn" title="複製卡片">📄</button>
+                <button class="view-card-btn" title="放大預覽">🔍</button>
+            `;
+
+            // 🪄 修正：完整寫入 challenge24hData 物件
+            cardEl.querySelector('.toggle-main-btn').addEventListener('click', async (e) => {
+                e.stopPropagation(); 
+                const newOwnership = (ownershipState === "取得") ? "無" : "取得";
+                await updateDoc(doc(db, "ptcg_cards", card.docId), { 
+                    challenge24hData: {
+                        ownership: newOwnership
+                    },
+                    section: "24h"
+                });
+            });
+
+            cardEl.querySelector('.del-card-btn').addEventListener('click', async (e) => {
+                e.stopPropagation(); 
+                if(confirm("確定要從雲端刪除這張卡片嗎？")) await deleteDoc(doc(db, "ptcg_cards", card.docId));
+            });
+
+            cardEl.querySelector('.copy-card-btn').addEventListener('click', async (e) => {
+                e.stopPropagation(); 
+                const duplicatedCardObj = { ...card };
+                delete duplicatedCardObj.docId; 
+                delete duplicatedCardObj.computedOwnership; 
+                await addDoc(cardsCollection, duplicatedCardObj);
+            });
+
+            cardEl.querySelector('.view-card-btn').addEventListener('click', (e) => {
+                e.stopPropagation();
+                document.getElementById('lightbox-img').src = displayImg;
+                document.getElementById('lightbox-modal').classList.add('show');
+            });
+
+            cardEl.addEventListener('click', () => openEditModal(card.docId));
+            cardsListDiv.appendChild(cardEl);
+        });
+
+        const inlineAddBtn = document.createElement("div");
+        inlineAddBtn.className = "add-new-card-box";
+        inlineAddBtn.innerHTML = `<span style="font-size: 28px; margin-bottom: 5px;">+</span><span>新增卡片</span>`;
+        inlineAddBtn.addEventListener("click", () => openNewModal(rarity.name, null));
+        cardsListDiv.appendChild(inlineAddBtn);
+
+        rowBlock.appendChild(cardsListDiv);
+        rarityRowsContainer24h.appendChild(rowBlock);
+    });
+}
+
+function createHorizontalRowAlt(parentBlock, cards, hasMainVal, labelText, className, rarityName) {
     const statusRow = document.createElement("div");
     statusRow.className = `status-row ${className}`;
-
-    const labelDiv = document.createElement("div");
-    labelDiv.className = "status-label";
-    labelDiv.innerText = labelText;
-    statusRow.appendChild(labelDiv);
+    statusRow.innerHTML = `<div class="status-label">${labelText}</div>`;
 
     const cardsListDiv = document.createElement("div");
     cardsListDiv.className = "cards-horizontal-list";
 
-    const filteredAndSorted = cards.filter(c => c.hasOnMain === hasMainVal).sort((a, b) => {
-        const idA = a.id || "";
-        const idB = b.id || "";
-        return idA.localeCompare(idB);
-    });
+    const filteredAndSorted = cards.filter(c => c.altAccData?.hasOnMain === hasMainVal).sort((a, b) => (a.id||"").localeCompare(b.id||""));
 
     filteredAndSorted.forEach(card => {
         const cardEl = document.createElement("div");
         cardEl.className = "card-box";
-        
-        const cardBg = card.bgColor || "#ffffff";
-        cardEl.style.backgroundColor = cardBg;
+        cardEl.style.backgroundColor = card.bgColor || "#ffffff";
 
         const displayImg = card.imageUrl ? card.imageUrl : "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
         const displayName = card.name ? card.name : "<span style='color:#ccc'>(未命名)</span>";
@@ -114,53 +232,92 @@ function createHorizontalRow(parentBlock, cards, hasMainVal, labelText, classNam
                 ${displayId}
             </div>
             <button class="del-card-btn" title="刪除卡片">✕</button>
+            <button class="copy-card-btn" title="複製卡片">📄</button>
+            <button class="view-card-btn" title="放大預覽">🔍</button>
         `;
 
-        // 綁定綠色切換：直接更新雲端
+        // 🪄 修正：完整寫入 altAccData 物件，確保 accountType 不會遺失
         cardEl.querySelector('.toggle-main-btn').addEventListener('click', async (e) => {
             e.stopPropagation(); 
-            const newStatus = (card.hasOnMain === "true") ? "false" : "true";
-            await updateDoc(doc(db, "ptcg_cards", card.docId), { hasOnMain: newStatus });
-            fetchCardsFromCloud();
+            const newStatus = (card.altAccData?.hasOnMain === "true") ? "false" : "true";
+            await updateDoc(doc(db, "ptcg_cards", card.docId), { 
+                altAccData: {
+                    accountType: card.altAccData?.accountType || "小帳", // 保留原本的帳號設定
+                    hasOnMain: newStatus
+                },
+                section: "alt_acc"
+            });
         });
 
-        // 綁定紅色刪除：直接更新雲端
         cardEl.querySelector('.del-card-btn').addEventListener('click', async (e) => {
             e.stopPropagation(); 
-            if(confirm("確定要從雲端刪除這張卡片嗎？")) {
-                await deleteDoc(doc(db, "ptcg_cards", card.docId));
-                fetchCardsFromCloud();
-            }
+            if(confirm("確定要從雲端刪除這張卡片嗎？")) await deleteDoc(doc(db, "ptcg_cards", card.docId));
+        });
+
+        cardEl.querySelector('.copy-card-btn').addEventListener('click', async (e) => {
+            e.stopPropagation(); 
+            const duplicatedCardObj = { ...card };
+            delete duplicatedCardObj.docId;
+            delete duplicatedCardObj.computedOwnership;
+            await addDoc(cardsCollection, duplicatedCardObj);
+        });
+
+        cardEl.querySelector('.view-card-btn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            document.getElementById('lightbox-img').src = displayImg;
+            document.getElementById('lightbox-modal').classList.add('show');
         });
 
         cardEl.addEventListener('click', () => openEditModal(card.docId));
-
         cardsListDiv.appendChild(cardEl);
     });
 
     const inlineAddBtn = document.createElement("div");
     inlineAddBtn.className = "add-new-card-box";
     inlineAddBtn.innerHTML = `<span style="font-size: 28px; margin-bottom: 5px;">+</span><span>新增卡片</span>`;
-    
-    inlineAddBtn.addEventListener("click", () => {
-        editingCardDocId = null; 
-        modalTitle.innerText = "➕ 新增卡片資料";
-        cardForm.reset(); 
-        document.getElementById("card-acc-type").value = currentAccountTab;
-        document.getElementById("card-rarity").value = rarityName;
-        document.getElementById("card-has-main").value = hasMainVal;
-        
-        // 重置顏色選擇器為白色
-        document.getElementById("card-bgcolor").value = "#ffffff";
-        colorSwatches.forEach(s => s.classList.remove("selected"));
-        colorSwatches[0].classList.add("selected");
-
-        formModal.classList.add("show");
-    });
-
+    inlineAddBtn.addEventListener("click", () => openNewModal(rarityName, hasMainVal));
     cardsListDiv.appendChild(inlineAddBtn);
+
     statusRow.appendChild(cardsListDiv);
     parentBlock.appendChild(statusRow);
+}
+
+// ==========================================
+// Modal 表單控制
+// ==========================================
+function setupModalFields() {
+    const groupAccType = document.getElementById("group-acc-type");
+    const groupHasMain = document.getElementById("group-has-main");
+    const groupOwnership = document.getElementById("group-ownership");
+
+    if (currentSection === "24h") {
+        groupAccType.style.display = "none";
+        groupHasMain.style.display = "none";
+        groupOwnership.style.display = "flex";
+    } else {
+        groupAccType.style.display = "flex";
+        groupHasMain.style.display = "flex";
+        groupOwnership.style.display = "none";
+    }
+}
+
+function openNewModal(rarityName, hasMainVal) {
+    editingCardDocId = null; 
+    modalTitle.innerText = "➕ 新增卡片資料";
+    cardForm.reset(); 
+    
+    setupModalFields();
+
+    document.getElementById("card-acc-type").value = currentAccountTab;
+    document.getElementById("card-rarity").value = rarityName;
+    if (hasMainVal !== null) document.getElementById("card-has-main").value = hasMainVal;
+    document.getElementById("card-ownership").value = "無"; 
+    
+    document.getElementById("card-bgcolor").value = "#ffffff";
+    colorSwatches.forEach(s => s.classList.remove("selected"));
+    colorSwatches[0].classList.add("selected");
+
+    formModal.classList.add("show");
 }
 
 function openEditModal(docId) {
@@ -169,17 +326,22 @@ function openEditModal(docId) {
         editingCardDocId = docId; 
         modalTitle.innerText = "✏️ 編輯卡片資料"; 
         
+        const originalSection = currentSection; 
+        currentSection = card.section || "alt_acc";
+        setupModalFields();
+        currentSection = originalSection; 
+
         document.getElementById("card-name").value = card.name || "";
         document.getElementById("card-id").value = card.id || "";
         document.getElementById("card-img").value = card.imageUrl || "";
-        document.getElementById("card-acc-type").value = card.accountType;
         document.getElementById("card-rarity").value = card.rarity;
-        document.getElementById("card-has-main").value = card.hasOnMain;
         
-        // 讀取這張卡片專屬的底色
+        document.getElementById("card-acc-type").value = card.altAccData?.accountType || "小帳";
+        document.getElementById("card-has-main").value = card.altAccData?.hasOnMain || "false";
+        document.getElementById("card-ownership").value = card.challenge24hData?.ownership || "無";
+        
         const cardBg = card.bgColor || "#ffffff";
         colorInput.value = cardBg;
-        
         colorSwatches.forEach(s => s.classList.remove("selected"));
         const matchSwatch = Array.from(colorSwatches).find(s => s.getAttribute("data-color").toUpperCase() === cardBg.toUpperCase());
         if (matchSwatch) matchSwatch.classList.add("selected");
@@ -188,25 +350,37 @@ function openEditModal(docId) {
     }
 }
 
-// 表單送出 (與雲端同步)
 cardForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    
     const submitBtn = cardForm.querySelector('button[type="submit"]');
-    submitBtn.innerText = "⏳ 雲端同步中...";
+    submitBtn.innerText = "⏳ 儲存中...";
     submitBtn.disabled = true;
 
-    const currentBgColor = document.getElementById("card-bgcolor").value;
-    
+    let saveSection = currentSection;
+    if (editingCardDocId) {
+        const existingCard = cardsData.find(c => c.docId === editingCardDocId);
+        if (existingCard) saveSection = existingCard.section || "alt_acc";
+    }
+
     const cardObj = {
         name: document.getElementById("card-name").value.trim(),
         id: document.getElementById("card-id").value.trim(),
         imageUrl: document.getElementById("card-img").value.trim(),
-        accountType: document.getElementById("card-acc-type").value,
         rarity: document.getElementById("card-rarity").value,
-        hasOnMain: document.getElementById("card-has-main").value,
-        bgColor: currentBgColor
+        bgColor: document.getElementById("card-bgcolor").value,
+        section: saveSection 
     };
+
+    if (saveSection === "24h") {
+        cardObj.challenge24hData = {
+            ownership: document.getElementById("card-ownership").value
+        };
+    } else {
+        cardObj.altAccData = {
+            accountType: document.getElementById("card-acc-type").value,
+            hasOnMain: document.getElementById("card-has-main").value
+        };
+    }
     
     if (editingCardDocId) {
         await updateDoc(doc(db, "ptcg_cards", editingCardDocId), cardObj);
@@ -217,11 +391,11 @@ cardForm.addEventListener("submit", async (e) => {
     formModal.classList.remove("show");
     submitBtn.innerText = "儲存";
     submitBtn.disabled = false;
-    
-    fetchCardsFromCloud();
 });
 
-// 調色盤邏輯
+// ==========================================
+// UI 元件事件綁定
+// ==========================================
 colorSwatches.forEach(swatch => {
     swatch.addEventListener("click", () => {
         colorSwatches.forEach(s => s.classList.remove("selected"));
@@ -229,98 +403,63 @@ colorSwatches.forEach(swatch => {
         colorInput.value = swatch.getAttribute("data-color");
     });
 });
-colorInput.addEventListener("input", () => {
-    colorSwatches.forEach(s => s.classList.remove("selected"));
-});
+colorInput.addEventListener("input", () => colorSwatches.forEach(s => s.classList.remove("selected")));
 
-// 頁籤與 Modal 切換
 accTabs.forEach(tab => {
     tab.addEventListener("click", () => {
         accTabs.forEach(t => t.classList.remove("active"));
         tab.classList.add("active");
         currentAccountTab = tab.getAttribute("data-acc");
-        renderMatrix();
+        renderAllViews();
     });
 });
 
-// --- 核心：渲染矩陣排版 ---
-function renderMatrix() {
-    matrixContainer.innerHTML = "";
-    
-    // 定義你要顯示的稀有度順序
-    const rarities = ["4菱", "1星", "2星", "1彩星", "2彩星", "3星&皇冠"];
-    
-    // 建立兩個 Row (主帳沒有、主帳有)
-    const rows = [
-        { label: "主帳沒有的", hasMainVal: "false" },
-        { label: "主帳有的", hasMainVal: "true" }
-    ];
+const lightboxModal = document.getElementById('lightbox-modal');
+document.getElementById('close-modal').addEventListener("click", () => formModal.classList.remove("show"));
+document.getElementById('lightbox-close').addEventListener('click', () => lightboxModal.classList.remove('show'));
+window.addEventListener("click", (e) => { 
+    if (e.target === formModal) formModal.classList.remove("show"); 
+    if (e.target === lightboxModal) lightboxModal.classList.remove('show');
+});
 
-    rows.forEach(rowInfo => {
-        const rowDiv = document.createElement("div");
-        rowDiv.className = "matrix-row";
+// ==========================================
+// 終極即時連線引擎
+// ==========================================
+rarityRowsContainerAlt.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>📡 建立即時連線中...</p>";
+
+onSnapshot(cardsCollection, (snapshot) => {
+    const rawCards = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const section = data.section || "alt_acc";
         
-        // Row 的標題
-        rowDiv.innerHTML = `<div class="row-header">${rowInfo.label}</div>`;
+        let altAccData = data.altAccData || (section === "alt_acc" ? { accountType: data.accountType, hasOnMain: data.hasOnMain } : null);
+        let challenge24hData = data.challenge24hData || (section === "24h" ? { ownership: data.ownership } : null);
 
-        // 依序畫出每一個稀有度的直行 (Column)
-        rarities.forEach(rarity => {
-            const groupDiv = document.createElement("div");
-            groupDiv.className = "rarity-group";
-            
-            // 💡 如果未來你想用圖片代替文字，可以把這裡的 innerHTML 改成 <img src="...">
-            groupDiv.innerHTML = `<div class="rarity-title">${rarity}</div>`;
-            
-            const cardListDiv = document.createElement("div");
-            cardListDiv.className = "card-list";
-
-            // 過濾並排序卡片 (過濾：帳號、稀有度、主帳擁有狀態 | 排序：依編號)
-            const filteredCards = cardsData.filter(c => 
-                c.accountType === currentAccountTab && 
-                c.rarity === rarity && 
-                c.hasOnMain === rowInfo.hasMainVal
-            ).sort((a, b) => a.id.localeCompare(b.id)); // 依編號排序
-
-            // 畫出卡片
-            filteredCards.forEach(card => {
-                const cardEl = document.createElement("div");
-                cardEl.className = "card-mini";
-                cardEl.innerHTML = `
-                    <img src="${card.imageUrl}">
-                    <div class="card-info">
-                        <strong>${card.name}</strong>
-                        ${card.id}
-                    </div>
-                    <button class="del-card-btn" onclick="deleteCard('${card.uuid}')">✕</button>
-                `;
-                cardListDiv.appendChild(cardEl);
-            });
-
-            groupDiv.appendChild(cardListDiv);
-            rowDiv.appendChild(groupDiv);
-        });
-
-        matrixContainer.appendChild(rowDiv);
+        return { docId: doc.id, ...data, section, altAccData, challenge24hData };
     });
-}
 
-// 刪除卡片
-window.deleteCard = function(uuid) {
-    if(confirm("確定刪除此卡片？")) {
-        cardsData = cardsData.filter(c => c.uuid !== uuid);
-        localStorage.setItem("ptcg_db", JSON.stringify(cardsData));
-        renderMatrix();
-    }
-};
+    const altAccStatusMap = {};
+    rawCards.filter(c => c.section === "alt_acc" && c.id && c.id.trim() !== "").forEach(c => {
+        const accType = c.altAccData?.accountType;
+        const currentHighest = altAccStatusMap[c.id];
+        if (accType === "資源帳") {
+            altAccStatusMap[c.id] = "資源帳";
+        } else if (accType === "小帳" && currentHighest !== "資源帳") {
+            altAccStatusMap[c.id] = "小帳";
+        }
+    });
 
-// --- 表單邏輯 ---
-const formModal = document.getElementById("form-modal");
-document.getElementById("open-form-btn").addEventListener("click", () => formModal.classList.add("show"));
-document.getElementById("close-modal").addEventListener("click", () => formModal.classList.remove("show"));
-
-document.getElementById("card-img").addEventListener("input", function() {
-    document.getElementById("img-preview").src = this.value || "https://placehold.co/250x350/eaeaea/888888?text=Preview";
+    cardsData = rawCards.map(c => {
+        if (c.section === "24h") {
+            let dbOwnership = c.challenge24hData?.ownership || "無";
+            if (dbOwnership !== "取得" && c.id && altAccStatusMap[c.id]) {
+                c.computedOwnership = altAccStatusMap[c.id]; 
+            } else {
+                c.computedOwnership = dbOwnership;
+            }
+        }
+        return c;
+    });
+    
+    renderAllViews();
 });
-
-// 🚀 啟動：向雲端要資料！
-fetchCardsFromCloud();

@@ -13,86 +13,119 @@
                 <h2>🗂️ 圖鑑分類</h2>
             </div>
             <ul id="sidebar-menu" class="sidebar-menu">
-                <li data-target="view-rarity">稀有度</li>
-                <li data-target="view-pack">系列卡包</li>
-                <li data-target="view-meta">Meta卡組</li>
-                <li data-target="view-needed">需要的卡</li>
-                <li data-target="view-2star">二星</li>
-                <li data-target="view-alt-account" class="active">小帳資源</li>
-                <li data-target="view-general">泛用卡</li>
+                <li>稀有度</li>
+                <li>系列卡包</li>
+                <li>Meta卡組</li>
+                <li>需要的卡</li>
+                <li>泛用卡</li>
+                <li>二星</li>
+                <li id="nav-alt-acc" class="active">小帳資源</li>
+                <li id="nav-24h-challenge">24H得卡挑戰</li>
             </ul>
         </aside>
 
         <main class="main-content">
             <header>
                 <h1 id="page-title">小帳資源</h1>
-                <button id="open-form-btn" class="btn-primary">➕ 新增卡片</button>
             </header>
             
-            <section id="view-alt-account" class="view-section active">
+            <section id="view-alt-acc" class="content-section">
                 <div class="account-tabs">
                     <button class="tab-btn active" data-acc="小帳">小帳</button>
                     <button class="tab-btn" data-acc="資源帳">資源帳</button>
                 </div>
-                
-                <div id="matrix-container" class="matrix-container">
-                    </div>
+                <div id="rarity-rows-container" class="rarity-rows-container"></div>
             </section>
 
-            <section id="view-rarity" class="view-section"><p>開發中...</p></section>
-            <section id="view-pack" class="view-section"><p>開發中...</p></section>
-            <section id="view-meta" class="view-section"><p>開發中...</p></section>
-            <section id="view-needed" class="view-section"><p>開發中...</p></section>
-            <section id="view-2star" class="view-section"><p>開發中...</p></section>
-            <section id="view-general" class="view-section"><p>開發中...</p></section>
+            <section id="view-24h-challenge" class="content-section" style="display: none;">
+                <div class="version-container">
+                    <label>版本：B3a</label>
+                    <img src="https://cdn.raenonx.cc/api/image/ptcgp?format=webp&url=/images/game/card/expansion/logo/zh/B3a.png&w=96&q=75" alt="B3a">
+                </div>
+                <div id="rarity-rows-24h-container" class="rarity-rows-container"></div>
+            </section>
         </main>
     </div>
 
     <div id="form-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" id="close-modal">&times;</span>
-            <h2>➕ 新增卡片資料</h2>
+            <h2 id="modal-title">➕ 新增卡片資料</h2>
             <form id="card-form">
                 <div class="input-group">
                     <label>寶可夢名稱：</label>
-                    <input type="text" id="card-name" required>
+                    <input type="text" id="card-name" placeholder="例如: 妙蛙種子">
                 </div>
                 <div class="input-group">
                     <label>卡片編號：</label>
-                    <input type="text" id="card-id" placeholder="例如: A1-001" required>
+                    <input type="text" id="card-id" placeholder="例如: A1-001">
                 </div>
                 <div class="input-group">
                     <label>圖片網址：</label>
-                    <input type="url" id="card-img" required>
+                    <input type="url" id="card-img" placeholder="請貼上圖片網址">
                 </div>
-                <div class="input-group">
-                    <label>所屬帳號 (Group 1)：</label>
+                
+                <div class="input-group" id="group-acc-type">
+                    <label>所屬帳號：</label>
                     <select id="card-acc-type">
                         <option value="小帳">小帳</option>
                         <option value="資源帳">資源帳</option>
                     </select>
                 </div>
+                
                 <div class="input-group">
-                    <label>稀有度 (Sub-group)：</label>
+                    <label>稀有度：</label>
                     <select id="card-rarity">
+                        <option value="3菱">3菱</option>
                         <option value="4菱">4菱</option>
                         <option value="1星">1星</option>
                         <option value="2星">2星</option>
                         <option value="1彩星">1彩星</option>
                         <option value="2彩星">2彩星</option>
-                        <option value="3星&皇冠">3星&皇冠</option>
+                        <option value="皇冠">皇冠</option>
                     </select>
                 </div>
-                <div class="input-group">
+
+                <div class="input-group" id="group-has-main">
                     <label>主帳是否有？：</label>
                     <select id="card-has-main">
                         <option value="false">主帳沒有的</option>
                         <option value="true">主帳有的</option>
                     </select>
                 </div>
-                <button type="submit" class="btn-primary" style="width:100%">儲存</button>
+
+                <div class="input-group" id="group-ownership" style="display: none;">
+                    <label>擁有狀態：</label>
+                    <select id="card-ownership">
+                        <option value="無">無</option>
+                        <option value="取得">取得</option>
+                        <option value="小帳">小帳</option>
+                        <option value="資源帳">資源帳</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label>卡片底色 (快速選擇或自訂)：</label>
+                    <div class="color-palette" id="color-palette">
+                        <div class="color-swatch selected" style="background-color: #FFFFFF;" data-color="#FFFFFF" title="白色"></div>
+                        <div class="color-swatch" style="background-color: #FFB7B2;" data-color="#FFB7B2" title="淺紅"></div>
+                        <div class="color-swatch" style="background-color: #FFCC6E;" data-color="#FFCC6E" title="淺橘"></div>
+                        <div class="color-swatch" style="background-color: #FFFFBE;" data-color="#FFFFBE" title="淺黃"></div>
+                        <div class="color-swatch" style="background-color: #D2EEA5;" data-color="#D2EEA5" title="淺綠"></div>
+                        <div class="color-swatch" style="background-color: #E0E0FF;" data-color="#E0E0FF" title="淺藍"></div>
+                        <div class="color-swatch" style="background-color: #FFEAFF;" data-color="#FFEAFF" title="淺紫"></div>
+                        <div class="color-swatch" style="background-color: #D3D3D3;" data-color="#D3D3D3" title="淺灰"></div>
+                        <input type="color" id="card-bgcolor" value="#ffffff" title="自訂其他顏色">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">儲存</button>
             </form>
         </div>
+    </div>
+
+    <div id="lightbox-modal" class="lightbox-modal">
+        <span class="lightbox-close" id="lightbox-close">&times;</span>
+        <img id="lightbox-img" class="lightbox-img" src="" alt="Enlarged Card">
     </div>
 
     <script type="module" src="script.js"></script>

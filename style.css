@@ -1,51 +1,436 @@
-/* 基本重置與佈局 */
-body { margin: 0; font-family: sans-serif; background-color: #f5f7f9; color: #333; }
-.app-layout { display: flex; height: 100vh; }
-.sidebar { width: 220px; background: white; border-right: 1px solid #ddd; }
-.sidebar-header { padding: 20px; border-bottom: 1px solid #ddd; }
-.sidebar-menu { list-style: none; padding: 0; margin: 0; }
-.sidebar-menu li { padding: 15px 20px; cursor: pointer; border-bottom: 1px solid #eee; }
-.sidebar-menu li:hover { background: #f9f9f9; }
-.sidebar-menu li.active { background: #e6f2ff; color: #007aff; font-weight: bold; border-right: 4px solid #007aff; }
+/* =========================================
+   基礎設定與側邊欄
+   ========================================= */
+body { 
+    margin: 0; 
+    font-family: sans-serif; 
+    background-color: #f0f3f6; 
+    color: #333; 
+}
 
-.main-content { flex: 1; padding: 30px; overflow-y: auto; }
-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.btn-primary { background: #007aff; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold;}
+.app-layout { 
+    display: flex; 
+    height: 100vh; 
+}
 
-/* 視圖切換 (只有帶有 active 的 section 會顯示) */
-.view-section { display: none; }
-.view-section.active { display: block; }
+.sidebar { 
+    width: 220px; 
+    background: white; 
+    border-right: 1px solid #ddd; 
+}
 
-/* 小帳資源專屬：頁籤設計 */
-.account-tabs { margin-bottom: 20px; border-bottom: 2px solid #ddd; }
-.tab-btn { background: none; border: none; padding: 10px 20px; font-size: 16px; cursor: pointer; color: #888; }
-.tab-btn.active { color: #007aff; border-bottom: 3px solid #007aff; font-weight: bold; }
+.sidebar-header { 
+    padding: 20px; 
+    border-bottom: 1px solid #ddd; 
+}
 
-/* 小帳資源專屬：矩陣排版 */
-.matrix-row { display: flex; margin-bottom: 30px; background: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
-.row-header { width: 120px; font-weight: bold; display: flex; align-items: center; border-right: 2px dashed #eee; margin-right: 20px; color: #555; }
+.sidebar-menu li { 
+    padding: 15px 20px; 
+    cursor: pointer; 
+    border-bottom: 1px solid #eee; 
+}
 
-/* 稀有度群組 */
-.rarity-group { flex: 1; display: flex; flex-direction: column; margin-right: 15px; }
-.rarity-title { text-align: center; font-weight: bold; padding-bottom: 10px; border-bottom: 2px solid #eee; margin-bottom: 15px; color: #777;}
-.card-list { display: flex; flex-direction: column; gap: 10px; }
+.sidebar-menu li.active { 
+    background: #e6f2ff; 
+    color: #007aff; 
+    font-weight: bold; 
+    border-right: 4px solid #007aff; 
+}
 
-/* 卡片縮圖設計 */
-.card-mini { display: flex; align-items: center; background: #f9f9f9; padding: 8px; border-radius: 8px; border: 1px solid #eee; position: relative;}
-.card-mini img { width: 40px; height: 56px; object-fit: cover; border-radius: 4px; margin-right: 10px; }
-.card-info { font-size: 12px; }
-.card-info strong { display: block; font-size: 14px; }
+/* =========================================
+   主要內容區與標題
+   ========================================= */
+.main-content { 
+    flex: 1; 
+    padding: 30px; 
+    overflow-y: auto; 
+}
 
-/* 刪除按鈕 */
-.del-card-btn { position: absolute; right: 5px; top: 5px; background: #ff3b30; color: white; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 10px; cursor: pointer; display: none; }
-.card-mini:hover .del-card-btn { display: block; }
+header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    margin-bottom: 20px; 
+}
 
-/* Modal 表單 */
-.modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
-.modal.show { display: flex; }
-.modal-content { background: white; padding: 30px; border-radius: 12px; width: 400px; position: relative; }
-.close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; }
-.input-group { margin-bottom: 15px; display: flex; flex-direction: column; }
-.input-group input, .input-group select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-.preview-container { text-align: center; margin-bottom: 15px; }
-.preview-container img { height: 100px; }
+.btn-primary { 
+    background: #007aff; 
+    color: white; 
+    border: none; 
+    padding: 10px 20px; 
+    border-radius: 8px; 
+    cursor: pointer; 
+    font-weight: bold;
+}
+
+/* =========================================
+   頂部頁籤 (小帳 / 資源帳)
+   ========================================= */
+.account-tabs { 
+    margin-bottom: 25px; 
+    border-bottom: 2px solid #ddd; 
+    display: flex; 
+    gap: 10px; 
+}
+
+.tab-btn { 
+    background: none; 
+    border: none; 
+    padding: 10px 25px; 
+    font-size: 16px; 
+    cursor: pointer; 
+    color: #888; 
+    padding-bottom: 12px; 
+}
+
+.tab-btn.active { 
+    color: #007aff; 
+    border-bottom: 3px solid #007aff; 
+    font-weight: bold; 
+}
+
+/* =========================================
+   稀有度大區塊與狀態行
+   ========================================= */
+.rarity-row-block {
+    background: white; 
+    border-radius: 12px; 
+    padding: 25px 20px; 
+    margin-bottom: 25px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03); 
+    border: 1px solid #eef1f5;
+}
+
+.rarity-header { 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    margin-bottom: 20px; 
+}
+
+.rarity-header img { 
+    height: 45px; 
+    margin-bottom: 8px; 
+    object-fit: contain; 
+}
+
+.rarity-header span { 
+    font-size: 16px; 
+    font-weight: bold; 
+    color: #007aff; 
+}
+
+.status-row { 
+    display: flex; 
+    margin-bottom: 15px; 
+    padding: 15px 10px; 
+    border-radius: 10px; 
+    min-height: 120px; 
+}
+
+.status-row:last-child { 
+    margin-bottom: 0; 
+}
+
+.status-label { 
+    width: 110px; 
+    font-size: 14px; 
+    font-weight: bold; 
+    color: #666; 
+    padding: 0 10px; 
+    display: flex; 
+    align-items: center; 
+}
+
+.status-row.not-on-main { 
+    background-color: #fff1f0; 
+    border: 1px dashed #ffa39e; 
+}
+
+.status-row.on-main { 
+    background-color: #f6ffed; 
+    border: 1px dashed #b7eb8f; 
+}
+
+/* =========================================
+   卡片排版與樣式
+   ========================================= */
+.cards-horizontal-list { 
+    flex: 1; 
+    display: flex; 
+    flex-wrap: wrap; 
+    gap: 15px; 
+    align-items: stretch; 
+}
+
+.card-box, .add-new-card-box { 
+    box-sizing: border-box; 
+    width: 150px; 
+    padding: 10px; 
+    border-radius: 12px; 
+}
+
+.card-box {
+    position: relative; 
+    border: 1px solid #e8e8e8;
+    text-align: center; 
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    transition: transform 0.2s, box-shadow 0.2s, background-color 0.3s;
+    cursor: pointer;
+}
+
+.card-box:hover { 
+    transform: translateY(-5px); 
+    box-shadow: 0 8px 16px rgba(0,0,0,0.08); 
+}
+
+.card-box img { 
+    width: 100%; 
+    aspect-ratio: 5 / 7; 
+    object-fit: cover; 
+    border-radius: 8px; 
+    margin-bottom: 10px; 
+    background: #fafafa; 
+}
+
+.card-info { 
+    font-size: 12px; 
+    color: #777; 
+    line-height: 1.4; 
+    padding-bottom: 4px;
+}
+
+.card-info strong { 
+    display: block; 
+    font-size: 14px; 
+    color: #222; 
+    margin-bottom: 4px; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+}
+
+/* =========================================
+   卡片上的 Hover 控制按鈕
+   ========================================= */
+.del-card-btn, .toggle-main-btn, .copy-card-btn, .view-card-btn {
+    position: absolute; 
+    border: none; 
+    border-radius: 50%; 
+    width: 24px; 
+    height: 24px; 
+    font-size: 12px; 
+    cursor: pointer; 
+    display: none; 
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2); 
+    align-items: center; 
+    justify-content: center; 
+    z-index: 10;
+}
+
+.card-box:hover .del-card-btn, 
+.card-box:hover .toggle-main-btn, 
+.card-box:hover .copy-card-btn, 
+.card-box:hover .view-card-btn { 
+    display: flex; 
+}
+
+.del-card-btn { background: #ff3b30; color: white; top: -8px; right: -8px; }
+.toggle-main-btn { background: #52c41a; color: white; top: -8px; left: -8px; }
+.copy-card-btn { background: #007aff; color: white; bottom: -8px; right: -8px; }
+.view-card-btn { background: #ff9500; color: white; bottom: -8px; left: -8px; }
+
+/* =========================================
+   新增卡片按鈕 (虛線框)
+   ========================================= */
+.add-new-card-box {
+    background: rgba(255, 255, 255, 0.4); 
+    border: 2px dashed #d9d9d9;
+    display: flex; 
+    flex-direction: column; 
+    justify-content: center; 
+    align-items: center;
+    cursor: pointer; 
+    color: #999; 
+    font-size: 14px; 
+    transition: all 0.2s;
+}
+
+.add-new-card-box:hover { 
+    background: #f0f7ff; 
+    border-color: #007aff; 
+    color: #007aff; 
+    transform: translateY(-3px); 
+}
+
+/* =========================================
+   表單 Modal 與輸入框
+   ========================================= */
+.modal { 
+    display: none; 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background: rgba(0,0,0,0.5); 
+    justify-content: center; 
+    align-items: center; 
+    z-index: 1000; 
+}
+
+.modal.show { 
+    display: flex; 
+}
+
+.modal-content { 
+    background: white; 
+    padding: 30px; 
+    border-radius: 12px; 
+    width: 380px; 
+    position: relative; 
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15); 
+}
+
+.close-btn { 
+    position: absolute; 
+    top: 15px; 
+    right: 20px; 
+    font-size: 24px; 
+    cursor: pointer; 
+    color: #999; 
+}
+
+.input-group { 
+    margin-bottom: 15px; 
+    display: flex; 
+    flex-direction: column; 
+}
+
+.input-group label { 
+    font-size: 13px; 
+    font-weight: bold; 
+    margin-bottom: 5px; 
+    color: #555; 
+}
+
+.input-group input, .input-group select { 
+    padding: 8px 12px; 
+    border: 1px solid #ccc; 
+    border-radius: 6px; 
+    font-size: 14px; 
+}
+
+/* =========================================
+   調色盤與色塊
+   ========================================= */
+.color-palette { 
+    display: flex; 
+    gap: 10px; 
+    align-items: center; 
+    flex-wrap: wrap; 
+    margin-top: 5px; 
+}
+
+.color-swatch { 
+    width: 28px; 
+    height: 28px; 
+    border-radius: 50%; 
+    cursor: pointer; 
+    border: 2px solid #e0e0e0; 
+    transition: transform 0.2s, box-shadow 0.2s; 
+    box-sizing: border-box; 
+}
+
+.color-swatch:hover { 
+    transform: scale(1.15); 
+}
+
+.color-swatch.selected { 
+    border-color: #007aff; 
+    box-shadow: 0 0 0 2px rgba(0,122,255,0.3); 
+    transform: scale(1.1); 
+}
+
+#card-bgcolor { 
+    width: 32px; 
+    height: 32px; 
+    padding: 0; 
+    border: none; 
+    background: none; 
+    cursor: pointer; 
+    border-radius: 4px; 
+}
+
+/* =========================================
+   Lightbox 燈箱放大預覽效果
+   ========================================= */
+.lightbox-modal { 
+    display: none; 
+    position: fixed; 
+    top: 0; 
+    left: 0; 
+    width: 100%; 
+    height: 100%; 
+    background: rgba(0, 0, 0, 0.85); 
+    justify-content: center; 
+    align-items: center; 
+    z-index: 2000; 
+}
+
+.lightbox-modal.show { 
+    display: flex; 
+}
+
+.lightbox-img { 
+    height: 85vh; 
+    width: auto; 
+    max-width: 85vw; 
+    object-fit: contain; 
+    border-radius: 16px; 
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8); 
+}
+
+.lightbox-close { 
+    position: absolute; 
+    top: 20px; 
+    right: 30px; 
+    font-size: 40px; 
+    color: white; 
+    cursor: pointer; 
+    transition: color 0.2s; 
+}
+
+.lightbox-close:hover { 
+    color: #ff3b30; 
+}
+
+/* =========================================
+   🪄 24H 得卡挑戰專用樣式
+   ========================================= */
+.version-container { 
+    margin-bottom: 20px; 
+    display: flex; 
+    align-items: center; 
+    font-size: 18px; 
+    font-weight: bold; 
+    color: #444; 
+}
+
+.version-container img { 
+    height: 28px; 
+    margin-left: 10px; 
+    object-fit: contain; 
+}
+
+.rarity-count { 
+    display: inline-block; 
+    background-color: #f0f0f0; 
+    color: #888; 
+    font-size: 14px; 
+    font-weight: normal; 
+    padding: 2px 8px; 
+    border-radius: 12px; 
+    margin-left: 8px; 
+    vertical-align: middle; 
+}

@@ -8,19 +8,23 @@
 </head>
 <body>
     <div class="app-layout">
-        <aside class="sidebar">
+        <!-- 🪄 加入 id="sidebar" -->
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <h2>🗂️ 圖鑑分類</h2>
+                <!-- 🪄 加入漢堡按鈕 -->
+                <button id="sidebar-toggle" class="sidebar-toggle-btn">☰</button>
+                <h2 class="sidebar-title">圖鑑分類</h2>
             </div>
             <ul id="sidebar-menu" class="sidebar-menu">
-                <li>稀有度</li>
-                <li>系列卡包</li>
-                <li>Meta卡組</li>
-                <li>需要的卡</li>
-                <li>泛用卡</li>
-                <li>二星</li>
-                <li id="nav-alt-acc" class="active">小帳資源</li>
-                <li id="nav-24h-challenge">24H得卡挑戰</li>
+                <!-- 🪄 將文字與 Icon 分離，移除黑點點 -->
+                <li><span class="nav-icon">✨</span><span class="nav-text">稀有度</span></li>
+                <li><span class="nav-icon">📦</span><span class="nav-text">系列卡包</span></li>
+                <li><span class="nav-icon">🔥</span><span class="nav-text">Meta卡組</span></li>
+                <li id="nav-needed-cards"><span class="nav-icon">🎯</span><span class="nav-text">需要的卡</span></li>
+                <li id="nav-general-cards"><span class="nav-icon">🛠️</span><span class="nav-text">泛用卡</span></li>
+                <li><span class="nav-icon">🌟</span><span class="nav-text">二星</span></li>
+                <li id="nav-alt-acc" class="active"><span class="nav-icon">🌱</span><span class="nav-text">小帳資源</span></li>
+                <li id="nav-24h-challenge"><span class="nav-icon">⏱️</span><span class="nav-text">24H得卡挑戰</span></li>
             </ul>
         </aside>
 
@@ -31,8 +35,8 @@
             
             <section id="view-alt-acc" class="content-section">
                 <div class="account-tabs">
-                    <button class="tab-btn active" data-acc="小帳">小帳</button>
-                    <button class="tab-btn" data-acc="資源帳">資源帳</button>
+                    <button class="tab-btn acc-tab-btn active" data-acc="小帳">小帳</button>
+                    <button class="tab-btn acc-tab-btn" data-acc="資源帳">資源帳</button>
                 </div>
                 <div id="rarity-rows-container" class="rarity-rows-container"></div>
             </section>
@@ -44,9 +48,22 @@
                 </div>
                 <div id="rarity-rows-24h-container" class="rarity-rows-container"></div>
             </section>
+
+            <section id="view-needed-cards" class="content-section" style="display: none;">
+                <div class="account-tabs">
+                    <button class="tab-btn needed-tab-btn active" data-needed="缺少的卡">缺少的卡</button>
+                    <button class="tab-btn needed-tab-btn" data-needed="金邊">金邊</button>
+                </div>
+                <div id="rarity-rows-needed-container" class="rarity-rows-container"></div>
+            </section>
+
+            <section id="view-general-cards" class="content-section" style="display: none;">
+                <div id="rarity-rows-general-container" class="rarity-rows-container"></div>
+            </section>
         </main>
     </div>
 
+    <!-- 表單 Modal -->
     <div id="form-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" id="close-modal">&times;</span>
@@ -72,14 +89,43 @@
                         <option value="資源帳">資源帳</option>
                     </select>
                 </div>
+
+                <div class="input-group" id="group-needed-tab" style="display: none;">
+                    <label>所屬分類：</label>
+                    <select id="card-needed-tab">
+                        <option value="缺少的卡">缺少的卡</option>
+                        <option value="金邊">金邊</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="group-general-type" style="display: none;">
+                    <label>泛用卡類型：</label>
+                    <select id="card-general-type">
+                        <option value="支援者">支援者</option>
+                        <option value="物品">物品</option>
+                        <option value="道具">道具</option>
+                        <option value="寶可夢">寶可夢</option>
+                    </select>
+                </div>
                 
-                <div class="input-group">
+                <div class="input-group" id="group-general-subtype" style="display: none;">
+                    <label>分類：</label>
+                    <select id="card-general-subtype">
+                        <option value="false">通用</option>
+                        <option value="true">特殊屬性</option>
+                    </select>
+                </div>
+                
+                <div class="input-group" id="group-rarity">
                     <label>稀有度：</label>
                     <select id="card-rarity">
+                        <option value="1菱">1菱</option>
+                        <option value="2菱">2菱</option>
                         <option value="3菱">3菱</option>
                         <option value="4菱">4菱</option>
                         <option value="1星">1星</option>
                         <option value="2星">2星</option>
+                        <option value="3星">3星</option>
                         <option value="1彩星">1彩星</option>
                         <option value="2彩星">2彩星</option>
                         <option value="皇冠">皇冠</option>
@@ -102,6 +148,11 @@
                         <option value="小帳">小帳</option>
                         <option value="資源帳">資源帳</option>
                     </select>
+                </div>
+
+                <div class="input-group" id="group-needed-qty" style="display: none;">
+                    <label>需要數量：</label>
+                    <input type="number" id="card-needed-qty" value="1" min="1">
                 </div>
 
                 <div class="input-group">

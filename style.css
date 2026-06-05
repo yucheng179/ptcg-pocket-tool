@@ -124,12 +124,13 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 /* =========================================
    卡片上的 Hover 控制按鈕
    ========================================= */
-.del-card-btn, .toggle-main-btn, .copy-card-btn, .view-card-btn { position: absolute; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 12px; cursor: pointer; display: none; box-shadow: 0 2px 5px rgba(0,0,0,0.2); align-items: center; justify-content: center; z-index: 10; }
-.card-box:hover .del-card-btn, .card-box:hover .toggle-main-btn, .card-box:hover .copy-card-btn, .card-box:hover .view-card-btn { display: flex; }
+.del-card-btn, .toggle-main-btn, .copy-card-btn, .view-card-btn, .quick-tier-btn { position: absolute; border: none; border-radius: 50%; width: 24px; height: 24px; font-size: 12px; cursor: pointer; display: none; box-shadow: 0 2px 5px rgba(0,0,0,0.2); align-items: center; justify-content: center; z-index: 10; }
+.card-box:hover .del-card-btn, .card-box:hover .toggle-main-btn, .card-box:hover .copy-card-btn, .card-box:hover .view-card-btn, .card-box:hover .quick-tier-btn { display: flex; }
 .del-card-btn { background: #ff3b30; color: white; top: -8px; right: -8px; }
 .toggle-main-btn { background: #52c41a; color: white; top: -8px; left: -8px; }
 .copy-card-btn { background: #007aff; color: white; bottom: -8px; right: -8px; }
 .view-card-btn { background: #ff9500; color: white; bottom: -8px; left: -8px; }
+.quick-tier-btn { background: #722ed1; color: white; top: -8px; left: -8px; font-size: 10px;}
 
 /* =========================================
    新增卡片按鈕 (虛線框)
@@ -144,7 +145,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .modal.show { display: flex; }
 .modal-content { background: white; padding: 30px; border-radius: 12px; width: 380px; position: relative; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
 .close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #999; }
-.input-group { margin-bottom: 15px; display: flex; flex-direction: column; }
+.input-group { margin-bottom: 15px; display: flex; flex-direction: column; position: relative; }
 .input-group label { font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #555; }
 .input-group input, .input-group select { padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
 
@@ -174,7 +175,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .rarity-count { display: inline-block; background-color: #f0f0f0; color: #888; font-size: 14px; font-weight: normal; padding: 2px 8px; border-radius: 12px; margin-left: 8px; vertical-align: middle; }
 
 /* =========================================
-   需要的卡 專用樣式 (數量增減控制)
+   需要卡 專用樣式 (數量增減控制)
    ========================================= */
 .qty-control { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed #ccc; }
 .qty-btn { background: #f0f0f0; border: none; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #333; font-size: 16px; transition: background 0.2s;}
@@ -182,7 +183,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .qty-number { font-weight: bold; color: #ff3b30; font-size: 16px; min-width: 20px;}
 
 /* =========================================
-   🪄 泛用卡 專屬樣式設定區
+   泛用卡 專屬樣式設定區
    ========================================= */
 .status-row.general-row-top { background-color: #f6ffed; border: 1px dashed #b7eb8f; }
 .status-row.general-row-bottom { background-color: #fff1f0; border: 1px dashed #ffa39e; }
@@ -191,3 +192,102 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     font-weight: 600;       
     letter-spacing: 2px;      
 }
+
+/* =========================================
+   二星卡 專屬狀態列底色
+   ========================================= */
+.status-row.two-star-main { background-color: #f6ffed; border: 1px dashed #b7eb8f; } /* 主帳：綠 */
+.status-row.two-star-alt { background-color: #fff7e6; border: 1px dashed #ffd591; }  /* 小帳：橘 */
+.status-row.two-star-res { background-color: #e6f7ff; border: 1px dashed #91d5ff; }  /* 資源：藍 */
+
+/* =========================================
+   二星卡 專屬評級標籤樣式
+   ========================================= */
+.tier-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: bold;
+    color: white;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.tier-ss { background: #ff4d4f; } /* 閃耀紅 */
+.tier-s { background: #fa8c16; }  /* 橘色 */
+.tier-a { background: #fadb14; color: #555; } /* 金黃色 */
+.tier-b { background: #52c41a; } /* 綠色 */
+.tier-c { background: #1890ff; } /* 藍色 */
+.tier-de { background: #d9d9d9; color: #555; } /* 紫色 */
+.tier-default { background: #d9d9d9; color: #555; box-shadow: none;} /* 灰色未評級 */
+
+/* 迷你快速評級選單內的按鈕 */
+.quick-tier-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 15px;
+}
+.tier-btn {
+    border: none;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    color: white;
+    cursor: pointer;
+    transition: transform 0.1s;
+    width: 45%;
+}
+.tier-btn:hover { transform: scale(1.05); }
+.tier-btn.tier-ss { background: #ff4d4f; }
+.tier-btn.tier-s { background: #fa8c16; }
+.tier-btn.tier-a { background: #fadb14; color: #555; }
+.tier-btn.tier-b { background: #52c41a; }
+.tier-btn.tier-c { background: #1890ff; }
+.tier-btn.tier-de { background: #d9d9d9; color: #555; }
+.tier-btn.tier-default { background: #d9d9d9; color: #555; }
+
+/* =========================================
+   🪄 自訂圖片智慧選單 (Autocomplete Dropdown)
+   ========================================= */
+.autocomplete-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    max-height: 400px;
+    overflow-y: auto;
+    z-index: 2000;
+    display: none; 
+}
+.autocomplete-dropdown.show { display: block; }
+.autocomplete-item {
+    display: flex;
+    align-items: center;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-bottom: 1px solid #eee;
+    transition: background-color 0.2s;
+}
+.autocomplete-item:last-child { border-bottom: none; }
+.autocomplete-item:hover { background-color: #f0f7ff; }
+
+/* 🪄 放大 2 倍的圖片與相應微調字體 */
+.autocomplete-item img {
+    width: 60px;       /* 30px * 2 */
+    height: 84px;      /* 42px * 2 */
+    object-fit: cover;
+    border-radius: 4px;
+    margin-right: 12px;
+    background: #fafafa;
+    border: 1px solid #ddd;
+}
+.autocomplete-item .ac-details { display: flex; flex-direction: column; }
+.autocomplete-item .ac-name { font-weight: bold; font-size: 16px; color: #333; }
+.autocomplete-item .ac-id { font-size: 13px; color: #888; margin-top: 4px;}

@@ -8,21 +8,18 @@
 </head>
 <body>
     <div class="app-layout">
-        <!-- 🪄 加入 id="sidebar" -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <!-- 🪄 加入漢堡按鈕 -->
                 <button id="sidebar-toggle" class="sidebar-toggle-btn">☰</button>
                 <h2 class="sidebar-title">圖鑑分類</h2>
             </div>
             <ul id="sidebar-menu" class="sidebar-menu">
-                <!-- 🪄 將文字與 Icon 分離，移除黑點點 -->
                 <li><span class="nav-icon">✨</span><span class="nav-text">稀有度</span></li>
                 <li><span class="nav-icon">📦</span><span class="nav-text">系列卡包</span></li>
                 <li><span class="nav-icon">🔥</span><span class="nav-text">Meta卡組</span></li>
-                <li id="nav-needed-cards"><span class="nav-icon">🎯</span><span class="nav-text">需要的卡</span></li>
+                <li id="nav-needed-cards"><span class="nav-icon">🎯</span><span class="nav-text">需要卡</span></li>
                 <li id="nav-general-cards"><span class="nav-icon">🛠️</span><span class="nav-text">泛用卡</span></li>
-                <li><span class="nav-icon">🌟</span><span class="nav-text">二星</span></li>
+                <li id="nav-two-star-cards"><span class="nav-icon">🌟</span><span class="nav-text">二星</span></li>
                 <li id="nav-alt-acc" class="active"><span class="nav-icon">🌱</span><span class="nav-text">小帳資源</span></li>
                 <li id="nav-24h-challenge"><span class="nav-icon">⏱️</span><span class="nav-text">24H得卡挑戰</span></li>
             </ul>
@@ -60,6 +57,15 @@
             <section id="view-general-cards" class="content-section" style="display: none;">
                 <div id="rarity-rows-general-container" class="rarity-rows-container"></div>
             </section>
+
+            <section id="view-two-star-cards" class="content-section" style="display: none;">
+                <div class="account-tabs">
+                    <button class="tab-btn two-star-tab-btn active" data-twostar="擁有的卡">擁有的卡</button>
+                    <button class="tab-btn two-star-tab-btn" data-twostar="想要的卡">想要的卡</button>
+                    <button class="tab-btn two-star-tab-btn" data-twostar="被交換的">被交換的</button>
+                </div>
+                <div id="rarity-rows-two-star-container" class="rarity-rows-container"></div>
+            </section>
         </main>
     </div>
 
@@ -69,9 +75,11 @@
             <span class="close-btn" id="close-modal">&times;</span>
             <h2 id="modal-title">➕ 新增卡片資料</h2>
             <form id="card-form">
-                <div class="input-group">
+                <!-- 🪄 將名稱輸入框改為自訂的圖片選單容器 -->
+                <div class="input-group" style="position: relative;">
                     <label>寶可夢名稱：</label>
-                    <input type="text" id="card-name" placeholder="例如: 妙蛙種子">
+                    <input type="text" id="card-name" placeholder="例如: 妙蛙種子" autocomplete="off">
+                    <div id="custom-autocomplete-list" class="autocomplete-dropdown"></div>
                 </div>
                 <div class="input-group">
                     <label>卡片編號：</label>
@@ -113,6 +121,46 @@
                     <select id="card-general-subtype">
                         <option value="false">通用</option>
                         <option value="true">特殊屬性</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="group-two-star-tab" style="display: none;">
+                    <label>二星卡分類：</label>
+                    <select id="card-two-star-tab">
+                        <option value="擁有的卡">擁有的卡</option>
+                        <option value="想要的卡">想要的卡</option>
+                        <option value="被交換的">被交換的</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="group-two-star-status" style="display: none;">
+                    <label>帳號狀態：</label>
+                    <select id="card-two-star-status">
+                        <option value="主帳">主帳</option>
+                        <option value="小帳">小帳</option>
+                        <option value="資源帳">資源帳</option>
+                    </select>
+                </div>
+
+                <div class="input-group" id="group-two-star-type" style="display: none;">
+                    <label>卡片類型：</label>
+                    <select id="card-two-star-type">
+                        <option value="支援者">支援者</option>
+                        <option value="寶可夢">寶可夢</option>
+                    </select>
+                </div>
+                
+                <div class="input-group" id="group-two-star-tier" style="display: none;">
+                    <label>評級：</label>
+                    <select id="card-two-star-tier">
+                        <option value="SS">SS 級</option>
+                        <option value="S">S 級</option>
+                        <option value="A">A 級</option>
+                        <option value="B">B 級</option>
+                        <option value="C">C 級</option>
+                        <option value="D">D 級</option>
+                        <option value="E">E 級</option>
+                        <option value="無" selected>無 (未評級)</option>
                     </select>
                 </div>
                 
@@ -171,6 +219,24 @@
                 </div>
                 <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">儲存</button>
             </form>
+        </div>
+    </div>
+
+    <!-- 快速修改評級專用的迷你 Modal -->
+    <div id="quick-tier-modal" class="modal">
+        <div class="modal-content" style="width: 260px; text-align: center; padding: 20px;">
+            <span class="close-btn" id="close-quick-tier-modal">&times;</span>
+            <h2 style="margin-top: 0; font-size: 18px; color: #555;">選擇卡片評級</h2>
+            <div class="quick-tier-options">
+                <button class="tier-btn tier-ss" data-tier="SS">SS 級</button>
+                <button class="tier-btn tier-s" data-tier="S">S 級</button>
+                <button class="tier-btn tier-a" data-tier="A">A 級</button>
+                <button class="tier-btn tier-b" data-tier="B">B 級</button>
+                <button class="tier-btn tier-c" data-tier="C">C 級</button>
+                <button class="tier-btn tier-de" data-tier="D">D 級</button>
+                <button class="tier-btn tier-de" data-tier="E">E 級</button>
+                <button class="tier-btn tier-default" data-tier="無" style="width: 100%;">無 (清除評分)</button>
+            </div>
         </div>
     </div>
 

@@ -23,7 +23,20 @@ let currentNeededTab = "缺少的卡";
 let currentTwoStarTab = "擁有的卡"; 
 let editingCardDocId = null; 
 let draggedCardDocId = null; 
+let editingDeckDocId = null;
+let draggedDeckDocId = null;
+let draggedDeckCardIndex = null;
+let draggedDeckTabId = null;
+let editingDeckCardIndex = null;
+let editingReplacementContext = null;
+let activeMetaDeckId = null; 
+let activeDeckTabId = null;
+let deckTabClickTimer = null;
+let activeMetaLobbyTabId = "b3";
+let draggedMetaLobbyTabId = null;
+let metaLobbyTabClickTimer = null;
 
+// --- 常數定義 ---
 const raritiesAlt = [
     { name: "4菱", icon: "https://img.game8.co/3995617/622e1c0cca9ffdaa43cdd588b8e18d78.png/show" },
     { name: "1星", icon: "https://img.game8.co/3994721/895579e1516f605b7882b0909f329b7e.png/show" },
@@ -67,7 +80,312 @@ const typesGeneral = [
 ];
 
 const tierWeights = { "SS": 8, "S": 7, "A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "無": 1 };
+const deckRowTypes = [
+    { key: "寶可夢", label: "寶可夢", aliases: ["寶可夢"] },
+    { key: "支援者", label: "支援者", aliases: ["支援者"] },
+    { key: "物品、道具、競技場", label: "物品、道具、競技場", aliases: ["物品、道具、競技場", "物品與道具"] }
+];
+const deckAttributeMeta = {
+    "草": { icon: "https://img.game8.co/4018726/c2d96eaebb6cd06d6a53dfd48da5341c.png/show", className: "attr-grass" },
+    "火": { icon: "https://img.game8.co/4018725/13914d1a973822da2863205cffe8d814.png/show", className: "attr-fire" },
+    "水": { icon: "https://img.game8.co/4018730/0eaf098686c55dd62893b16d190c80b5.png/show", className: "attr-water" },
+    "雷": { icon: "https://img.game8.co/4018727/9851d3f597a114b1ab6ef669071cda7c.png/show", className: "attr-lightning" },
+    "電": { icon: "https://img.game8.co/4018727/9851d3f597a114b1ab6ef669071cda7c.png/show", className: "attr-lightning" },
+    "超": { icon: "https://img.game8.co/4018729/5d54ec566203717af2c7b7a14f69e0d7.png/show", className: "attr-psychic" },
+    "鬥": { icon: "https://img.game8.co/4018724/e22e7f39587352fc048b3821da0ceea4.png/show", className: "attr-fighting" },
+    "惡": { icon: "https://img.game8.co/4018722/3488b79c0d788fbcb381c92ce97b750d.png/show", className: "attr-dark" },
+    "鋼": { icon: "https://img.game8.co/4018728/fdfe7a7dc4753da40de9c04aa96ccc25.png/show", className: "attr-metal" },
+    "無": { icon: "https://img.game8.co/4018721/a654c44596214b3bf38769c180602a16.png/show", className: "attr-colorless" },
+    "龍": { icon: "https://img.game8.co/4018723/65faf7d97c4fc59e1bf4bb67bc37af16.png/show", className: "attr-dragon" }
+};
 
+function renderDeckAttributeIcon(icon, attrName) {
+    if (!icon) return "•";
+    if (/^https?:\/\//i.test(icon)) {
+        return `<img class="deck-attr-icon" src="${icon}" alt="${attrName}" onerror="this.style.display='none'">`;
+    }
+    return icon;
+}
+
+function normalizeCardName(name = "") {
+    return name
+        .normalize("NFKC")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLocaleLowerCase();
+}
+
+function normalizeCardImageUrl(imageUrl = "") {
+    const trimmedUrl = imageUrl.trim();
+    if (!trimmedUrl) return "";
+
+    try {
+        const url = new URL(trimmedUrl);
+        url.hash = "";
+        url.search = "";
+        url.hostname = url.hostname.toLowerCase();
+        url.pathname = decodeURIComponent(url.pathname).replace(/\/+$/, "");
+        return `${url.hostname}${url.pathname}`.toLocaleLowerCase();
+    } catch {
+        return trimmedUrl
+            .replace(/[?#].*$/, "")
+            .replace(/\/+$/, "")
+            .toLocaleLowerCase();
+    }
+}
+
+function addUniqueCardToDict(card = {}) {
+    const name = (card.name || "").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim();
+    const normalizedName = normalizeCardName(name);
+    if (!normalizedName) return;
+
+    const imageUrl = (card.imageUrl || card.img || "").trim();
+    const normalizedImageUrl = normalizeCardImageUrl(imageUrl);
+    const id = (card.id || "").trim();
+    const rarity = card.rarity || "1星";
+    const bgColor = card.bgColor || "#ffffff";
+
+    if (!uniqueCardsDict[normalizedName]) {
+        uniqueCardsDict[normalizedName] = [];
+    }
+
+    const existing = uniqueCardsDict[normalizedName].find(item => item.normalizedImageUrl === normalizedImageUrl);
+    if (!existing) {
+        uniqueCardsDict[normalizedName].push({ name, id, imageUrl, normalizedImageUrl, rarity, bgColor });
+        return;
+    }
+
+    if (!existing.name && name) existing.name = name;
+    if (!existing.imageUrl && imageUrl) existing.imageUrl = imageUrl;
+    if (!existing.id && id) existing.id = id;
+    if (!existing.rarity && rarity) existing.rarity = rarity;
+    if ((!existing.bgColor || existing.bgColor === "#ffffff") && bgColor) {
+        existing.bgColor = bgColor;
+    }
+}
+
+function getAutocompleteMatches(filterText = "") {
+    const normalizedFilter = normalizeCardName(filterText);
+    return Object.entries(uniqueCardsDict)
+        .filter(([normalizedName]) => normalizedName.includes(normalizedFilter))
+        .flatMap(([, variants]) => variants.map((data, variantIndex) => ({ name: data.name, data, variantIndex })));
+}
+
+function getCardQuantity(card) {
+    return card.neededCardsData?.quantity || card.twoStarData?.quantity || card.altAccData?.quantity || 1;
+}
+
+function getCardsQuantityTotal(cards = []) {
+    return cards.reduce((sum, card) => sum + getCardQuantity(card), 0);
+}
+
+function isTwoStarCardInRow(card, filterVal) {
+    if (currentTwoStarTab !== "擁有的卡") {
+        return card.twoStarData?.type === filterVal;
+    }
+
+    const status = card.twoStarData?.status;
+    if (filterVal === "主帳") {
+        return status === "主帳" || status === "本帳";
+    }
+    return status === filterVal;
+}
+
+async function updateCardQuantity(card, fieldPath, newQty) {
+    const quantity = Math.max(1, newQty);
+    const payload = { [fieldPath]: quantity };
+
+    if (card.section === "alt_acc") {
+        payload.altAccData = {
+            ...(card.altAccData || {}),
+            accountType: card.altAccData?.accountType || card.accountType || currentAccountTab || "小帳",
+            hasOnMain: card.altAccData?.hasOnMain ?? card.hasOnMain ?? "false",
+            quantity
+        };
+        delete payload["altAccData.quantity"];
+    }
+
+    if (card.section === "alt_acc" && (card.rarity === "2星" || card.rarity === "2彩星")) {
+        payload["twoStarData.quantity"] = quantity;
+    }
+
+    await updateDoc(doc(db, "ptcg_cards", card.docId), payload);
+}
+
+function renderQtyControl(qty) {
+    return `
+        <div class="qty-control">
+            <button class="qty-btn qty-minus" title="減少數量">-</button>
+            <span class="qty-number">${qty}</span>
+            <button class="qty-btn qty-plus" title="增加數量">+</button>
+        </div>
+    `;
+}
+
+function bindQtyControl(cardEl, card, fieldPath, qty) {
+    cardEl.querySelector('.qty-minus')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const newQty = Math.max(1, qty - 1);
+        if (newQty !== qty) await updateCardQuantity(card, fieldPath, newQty);
+    });
+    cardEl.querySelector('.qty-plus')?.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await updateCardQuantity(card, fieldPath, qty + 1);
+    });
+}
+
+function getDeckCardType(cardType) {
+    return deckRowTypes.find(row => row.aliases.includes(cardType))?.key || cardType || "寶可夢";
+}
+
+function getMetaLobbyTabs() {
+    const config = cardsData.find(card => card.section === "meta_deck_lobby_config");
+    const tabs = config?.lobbyTabs;
+    if (Array.isArray(tabs) && tabs.length > 0) return tabs;
+    return [{ id: "b3", name: "B3" }];
+}
+
+function getDeckLobbyTabId(deck) {
+    return deck.deckData?.lobbyTabId || "b3";
+}
+
+async function saveMetaLobbyTabs(tabs) {
+    const config = cardsData.find(card => card.section === "meta_deck_lobby_config");
+    if (config) {
+        await updateDoc(doc(db, "ptcg_cards", config.docId), { lobbyTabs: tabs });
+    } else {
+        await addDoc(cardsCollection, { section: "meta_deck_lobby_config", lobbyTabs: tabs });
+    }
+}
+
+function cloneDeckCards(cards = []) {
+    return cards.map(card => ({ ...card }));
+}
+
+function cloneDeckReplacements(replacements = []) {
+    return replacements.map(group => ({
+        ...group,
+        sources: getReplacementSources(group).map(card => ({ ...card })),
+        alternatives: Array.isArray(group.alternatives)
+            ? group.alternatives.map(card => ({ ...card }))
+            : []
+    }));
+}
+
+function getReplacementSources(group = {}) {
+    if (Array.isArray(group.sources) && group.sources.length > 0) return group.sources;
+    if (group.source && (group.source.name || group.source.img)) return [group.source];
+    return [];
+}
+
+function getDeckTabCoverCard(tab, deck) {
+    if (tab?.coverCard) {
+        return {
+            name: tab.coverCard.name || "",
+            img: tab.coverCard.img || tab.coverImg || deck?.deckData?.coverImg || ""
+        };
+    }
+    return {
+        name: tab?.coverName || "",
+        img: tab?.coverImg || deck?.deckData?.coverImg || ""
+    };
+}
+
+function getDeckTabs(deck) {
+    const tabs = deck?.deckData?.tabs;
+    if (Array.isArray(tabs) && tabs.length > 0) {
+        return tabs.map((tab, index) => {
+            const coverCard = getDeckTabCoverCard(tab, deck);
+            return {
+                id: tab.id || `tab-${index}`,
+                name: tab.name || `牌組 ${index + 1}`,
+                coverCard,
+                coverImg: coverCard.img,
+                cards: Array.isArray(tab.cards) ? tab.cards : [],
+                replacements: Array.isArray(tab.replacements) ? tab.replacements : []
+            };
+        });
+    }
+
+    const coverCard = { name: "", img: deck?.deckData?.coverImg || "" };
+    return [{
+        id: "default",
+        name: "預設牌組",
+        coverCard,
+        coverImg: coverCard.img,
+        cards: Array.isArray(deck?.deckData?.cards) ? deck.deckData.cards : [],
+        replacements: []
+    }];
+}
+
+function getActiveDeckTab(deck) {
+    const tabs = getDeckTabs(deck);
+    let activeTab = tabs.find(tab => tab.id === activeDeckTabId);
+    if (!activeTab) {
+        activeTab = tabs[0];
+        activeDeckTabId = activeTab.id;
+    }
+    return { tabs, activeTab };
+}
+
+async function saveDeckTabs(deck, tabs) {
+    const activeTab = tabs.find(tab => tab.id === activeDeckTabId) || tabs[0];
+    await updateDoc(doc(db, "ptcg_cards", deck.docId), {
+        "deckData.tabs": tabs,
+        "deckData.cards": activeTab?.cards || []
+    });
+}
+
+function openDeckCardModal(rowType, card = null, index = null) {
+    deckCardForm.reset();
+    editingDeckCardIndex = index;
+    document.querySelector("#deck-card-form-modal h2").innerText = index === null ? "➕ 放入卡牌至牌組" : "✏️ 編輯牌組卡片";
+    deckCardForm.querySelector('button[type="submit"]').innerText = index === null ? "加入牌組" : "儲存卡片";
+    document.getElementById("deck-card-name").value = card?.name || "";
+    document.getElementById("deck-card-img").value = card?.img || "";
+    document.getElementById("deck-card-type").value = getDeckCardType(card?.type || rowType);
+    document.getElementById("deck-card-qty").value = card?.qty || 2;
+    deckCardFormModal.classList.add("show");
+}
+
+function openDeckCoverModal(deck, activeTab) {
+    deckCoverForm.reset();
+    document.getElementById("deck-cover-name").value = activeTab.coverCard?.name || "";
+    document.getElementById("deck-cover-img").value = activeTab.coverCard?.img || activeTab.coverImg || deck.deckData?.coverImg || "";
+    deckCoverFormModal.classList.add("show");
+}
+
+function openDeckReplacementModal(groupId, role, alternativeIndex = null, card = {}) {
+    editingReplacementContext = { groupId, role, alternativeIndex };
+    deckReplacementForm.reset();
+    const deck = cardsData.find(c => c.docId === activeMetaDeckId);
+    const activeTab = deck ? getActiveDeckTab(deck).activeTab : null;
+    const group = activeTab?.replacements?.find(item => item.id === groupId);
+    const canAddSource = role === "source" && alternativeIndex !== null;
+    document.getElementById("deck-replacement-modal-title").innerText =
+        role === "source"
+            ? (alternativeIndex === null ? "新增基準卡" : "編輯基準卡")
+            : (alternativeIndex === null ? "新增替換卡" : "編輯替換卡");
+    document.getElementById("add-second-source-card").style.display = canAddSource ? "block" : "none";
+    document.getElementById("deck-replacement-name").value = card?.name || "";
+    document.getElementById("deck-replacement-img").value = card?.img || "";
+    deckReplacementFormModal.classList.add("show");
+    document.getElementById("deck-replacement-name").focus();
+}
+
+function openDeckModal(deck = null, tierName = "Tier 3") {
+    deckForm.reset();
+    editingDeckDocId = deck?.docId || null;
+    document.getElementById("deck-modal-title").innerText = editingDeckDocId ? "✏️ 編輯 Meta 牌組" : "➕ 新增 Meta 牌組";
+    document.getElementById("deck-name").value = deck?.deckData?.name || "";
+    document.getElementById("deck-img").value = deck?.deckData?.coverImg || "";
+    document.getElementById("deck-tier").value = deck?.deckData?.tier || tierName;
+    document.getElementById("deck-attribute").value = deck?.deckData?.attribute || "草";
+    deckFormModal.classList.add("show");
+}
+
+// --- DOM 綁定 ---
 const rarityRowsContainerAlt = document.getElementById("rarity-rows-container");
 const rarityRowsContainer24h = document.getElementById("rarity-rows-24h-container");
 const rarityRowsContainerNeeded = document.getElementById("rarity-rows-needed-container");
@@ -80,37 +398,64 @@ const modalTitle = document.getElementById("modal-title");
 const colorSwatches = document.querySelectorAll(".color-swatch");
 const colorInput = document.getElementById("card-bgcolor");
 
-// ==========================================
-// 視圖切換與側邊欄折疊邏輯
-// ==========================================
 const navAltAcc = document.getElementById("nav-alt-acc");
 const nav24h = document.getElementById("nav-24h-challenge");
 const navNeeded = document.getElementById("nav-needed-cards");
 const navGeneral = document.getElementById("nav-general-cards");
 const navTwoStar = document.getElementById("nav-two-star-cards");
+const navMetaDecks = document.getElementById("nav-meta-decks");
 
 const viewAltAcc = document.getElementById("view-alt-acc");
 const view24h = document.getElementById("view-24h-challenge");
 const viewNeeded = document.getElementById("view-needed-cards");
 const viewGeneral = document.getElementById("view-general-cards");
 const viewTwoStar = document.getElementById("view-two-star-cards");
+const viewMetaDecks = document.getElementById("view-meta-decks");
 
 const pageTitle = document.getElementById("page-title");
-
 const sidebar = document.getElementById('sidebar');
 const sidebarToggleBtn = document.getElementById('sidebar-toggle');
-sidebarToggleBtn.addEventListener('click', () => {
-    sidebar.classList.toggle('collapsed');
-});
+sidebarToggleBtn.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
 
+// Meta 牌組 DOM
+const metaDecksListView = document.getElementById("meta-decks-list-view");
+const gridTier1 = document.getElementById("tier-1-grid");
+const gridTier2 = document.getElementById("tier-2-grid");
+const gridTier3 = document.getElementById("tier-3-grid");
+const metaDeckDetailView = document.getElementById("meta-deck-detail-view");
+const btnBackDecks = document.getElementById("btn-back-decks");
+const detailDeckTitle = document.getElementById("detail-deck-title");
+const detailDeckCover = document.getElementById("detail-deck-cover");
+const detailDeckRows = document.getElementById("detail-deck-rows");
+const deckFormModal = document.getElementById("deck-form-modal");
+const deckForm = document.getElementById("deck-form");
+const deckCardFormModal = document.getElementById("deck-card-form-modal");
+const deckCardForm = document.getElementById("deck-card-form");
+const deckCoverFormModal = document.getElementById("deck-cover-form-modal");
+const deckCoverForm = document.getElementById("deck-cover-form");
+const deckReplacementFormModal = document.getElementById("deck-replacement-form-modal");
+const deckReplacementForm = document.getElementById("deck-replacement-form");
+
+// ==========================================
+// 視圖切換邏輯
+// ==========================================
 function switchSection(sectionName, titleText, navEl, viewEl) {
     currentSection = sectionName;
-    [navAltAcc, nav24h, navNeeded, navGeneral, navTwoStar].forEach(el => el.classList.remove("active"));
-    [viewAltAcc, view24h, viewNeeded, viewGeneral, viewTwoStar].forEach(el => el.style.display = "none");
+    [navAltAcc, nav24h, navNeeded, navGeneral, navTwoStar, navMetaDecks].forEach(el => el.classList.remove("active"));
+    [viewAltAcc, view24h, viewNeeded, viewGeneral, viewTwoStar, viewMetaDecks].forEach(el => el.style.display = "none");
     
     navEl.classList.add("active");
     viewEl.style.display = "block";
     pageTitle.innerText = titleText;
+    
+    if (sectionName === "meta_decks") {
+        activeMetaDeckId = null;
+        activeDeckTabId = null;
+        metaDecksListView.style.display = "block";
+        metaDeckDetailView.style.display = "none";
+        scrollMainToTop();
+    }
+
     renderAllViews();
 }
 
@@ -119,21 +464,24 @@ nav24h.addEventListener("click", () => switchSection("24h", "24H得卡挑戰", n
 navNeeded.addEventListener("click", () => switchSection("needed_cards", "需要卡", navNeeded, viewNeeded));
 navGeneral.addEventListener("click", () => switchSection("general_cards", "泛用卡", navGeneral, viewGeneral));
 navTwoStar.addEventListener("click", () => switchSection("two_star_cards", "二星", navTwoStar, viewTwoStar));
+navMetaDecks.addEventListener("click", () => switchSection("meta_decks", "Meta牌組", navMetaDecks, viewMetaDecks));
 
-// ==========================================
-// 渲染邏輯
-// ==========================================
+function scrollMainToTop() {
+    document.querySelector(".main-content")?.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 function renderAllViews() {
-    if (currentSection === "alt_acc") {
-        renderAltAccRows();
-    } else if (currentSection === "24h") {
-        render24hRows();
-    } else if (currentSection === "needed_cards") {
-        renderNeededCardsRows();
-    } else if (currentSection === "general_cards") {
-        renderGeneralCardsRows();
-    } else if (currentSection === "two_star_cards") {
-        renderTwoStarCardsRows();
+    if (currentSection === "alt_acc") renderAltAccRows();
+    else if (currentSection === "24h") render24hRows();
+    else if (currentSection === "needed_cards") renderNeededCardsRows();
+    else if (currentSection === "general_cards") renderGeneralCardsRows();
+    else if (currentSection === "two_star_cards") renderTwoStarCardsRows();
+    else if (currentSection === "meta_decks") {
+        if (activeMetaDeckId) {
+            renderMetaDeckDetail();
+        } else {
+            renderMetaDecksList();
+        }
     }
 }
 
@@ -147,7 +495,772 @@ async function handleSafeCopyCard(card) {
     await addDoc(cardsCollection, d);
 }
 
-// --- 渲染：二星 ---
+// ==========================================
+// 🪄 渲染：Meta 牌組
+// ==========================================
+function renderMetaDecksList() {
+    gridTier1.innerHTML = "";
+    gridTier2.innerHTML = "";
+    gridTier3.innerHTML = "";
+
+    const lobbyTabs = getMetaLobbyTabs();
+    if (!lobbyTabs.some(tab => tab.id === activeMetaLobbyTabId)) activeMetaLobbyTabId = lobbyTabs[0].id;
+    renderMetaLobbyTabs(lobbyTabs);
+
+    const decks = cardsData.filter(c => c.section === "meta_deck" && getDeckLobbyTabId(c) === activeMetaLobbyTabId);
+    decks.sort((a, b) => (a.deckData?.order || 0) - (b.deckData?.order || 0));
+
+    decks.forEach(deck => {
+        const box = document.createElement("div");
+        box.className = "deck-box-container";
+        box.setAttribute("draggable", true);
+        box.dataset.deckId = deck.docId;
+        
+        const deckName = deck.deckData?.name || "未命名牌組";
+        const deckImg = deck.deckData?.coverImg || "https://placehold.co/300x420/eaeaea/999999?text=Deck";
+        const deckAttr = deck.deckData?.attribute || "無";
+        const attrMeta = deckAttributeMeta[deckAttr] || { icon: "•", className: "attr-none" };
+        box.classList.add(attrMeta.className);
+
+        box.innerHTML = `
+            <button class="del-deck-btn" title="刪除牌組">✕</button>
+            <div class="deck-box-cover-wrap">
+                <img class="deck-box-cover" src="${deckImg}" onerror="this.src='https://placehold.co/300x420/eaeaea/999999?text=Error'">
+            </div>
+            <div class="deck-box-info">
+                <div class="deck-box-name" title="${deckName}">${deckName}</div>
+                <div class="deck-attr-tag" title="${deckAttr}">${renderDeckAttributeIcon(attrMeta.icon, deckAttr)}</div>
+            </div>
+        `;
+
+        box.querySelector(".deck-box-cover-wrap").addEventListener("click", () => {
+            activeMetaDeckId = deck.docId;
+            activeDeckTabId = null;
+            metaDecksListView.style.display = "none";
+            metaDeckDetailView.style.display = "block";
+            scrollMainToTop();
+            renderMetaDeckDetail();
+        });
+
+        box.querySelector(".deck-box-info").addEventListener("click", (e) => {
+            e.stopPropagation();
+            openDeckModal(deck);
+        });
+
+        box.addEventListener("dragstart", (e) => {
+            draggedDeckDocId = deck.docId;
+            e.dataTransfer.effectAllowed = "move";
+            setTimeout(() => box.classList.add("dragging"), 0);
+        });
+
+        box.addEventListener("dragend", () => {
+            box.classList.remove("dragging");
+            draggedDeckDocId = null;
+        });
+
+        box.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            box.classList.add("drag-over");
+        });
+
+        box.addEventListener("dragleave", () => box.classList.remove("drag-over"));
+
+        box.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            box.classList.remove("drag-over");
+            await reorderMetaDecks(deck.docId, deck.deckData?.tier || "Tier 3");
+        });
+
+        box.querySelector('.del-deck-btn').addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (confirm(`確定要刪除牌組「${deckName}」嗎？裡面的卡片也會一併消失喔！`)) {
+                await deleteDoc(doc(db, "ptcg_cards", deck.docId));
+            }
+        });
+
+        const tier = deck.deckData?.tier || "Tier 3";
+        if (tier === "Tier 1") gridTier1.appendChild(box);
+        else if (tier === "Tier 2") gridTier2.appendChild(box);
+        else gridTier3.appendChild(box);
+    });
+
+    const tiers = [
+        { grid: gridTier1, name: "Tier 1" },
+        { grid: gridTier2, name: "Tier 2" },
+        { grid: gridTier3, name: "Tier 3" }
+    ];
+
+    tiers.forEach(t => {
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-new-deck-box";
+        addBtn.innerHTML = `<span style="font-size: 32px; margin-bottom: 10px;">+</span><span>新增牌組</span>`;
+        addBtn.addEventListener("click", () => openDeckModal(null, t.name));
+        t.grid.appendChild(addBtn);
+
+        t.grid.ondragover = (e) => {
+            if (!draggedDeckDocId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+        };
+
+        t.grid.ondrop = async (e) => {
+            if (!draggedDeckDocId || e.target.closest(".deck-box-container")) return;
+            e.preventDefault();
+            await reorderMetaDecks(null, t.name);
+        };
+    });
+}
+
+async function reorderMetaDecks(targetDeckId, targetTier) {
+    if (!draggedDeckDocId) return;
+    if (targetDeckId === draggedDeckDocId) return;
+
+    const draggedDeck = cardsData.find(c => c.docId === draggedDeckDocId);
+    if (!draggedDeck) return;
+
+    const sortedTargetDecks = cardsData
+        .filter(c => c.section === "meta_deck"
+            && c.docId !== draggedDeckDocId
+            && getDeckLobbyTabId(c) === activeMetaLobbyTabId
+            && (c.deckData?.tier || "Tier 3") === targetTier)
+        .sort((a, b) => (a.deckData?.order || 0) - (b.deckData?.order || 0));
+
+    const insertIndex = targetDeckId ? sortedTargetDecks.findIndex(c => c.docId === targetDeckId) : sortedTargetDecks.length;
+    sortedTargetDecks.splice(insertIndex < 0 ? sortedTargetDecks.length : insertIndex, 0, draggedDeck);
+
+    const batch = writeBatch(db);
+    const now = Date.now();
+    sortedTargetDecks.forEach((deck, idx) => {
+        const deckRef = doc(db, "ptcg_cards", deck.docId);
+        batch.update(deckRef, {
+            "deckData.tier": targetTier,
+            "deckData.order": now + idx
+        });
+    });
+    await batch.commit();
+}
+
+btnBackDecks.addEventListener("click", () => {
+    activeMetaDeckId = null;
+    activeDeckTabId = null;
+    metaDeckDetailView.style.display = "none";
+    metaDecksListView.style.display = "block";
+    renderAllViews();
+});
+
+function renderMetaDeckDetail() {
+    const deck = cardsData.find(c => c.docId === activeMetaDeckId);
+    if (!deck) {
+        btnBackDecks.click();
+        return;
+    }
+
+    detailDeckRows.innerHTML = "";
+    
+    const { tabs, activeTab } = getActiveDeckTab(deck);
+    const currentCards = activeTab.cards || [];
+    detailDeckTitle.innerText = deck.deckData?.name || "未命名牌組";
+    detailDeckCover.src = activeTab.coverCard?.img || activeTab.coverImg || deck.deckData?.coverImg || "https://placehold.co/300x420/eaeaea/999999?text=Cover";
+    renderDeckTabCoverEditor(deck, tabs, activeTab);
+    renderDeckTabsBar(deck, tabs, activeTab);
+
+    deckRowTypes.forEach(rowType => {
+        const rowCards = currentCards
+            .map((card, index) => ({ card, index }))
+            .filter(item => getDeckCardType(item.card.type) === rowType.key);
+        
+        const rowBlock = document.createElement("div");
+        rowBlock.className = "rarity-row-block";
+        rowBlock.style.marginBottom = "15px";
+        
+        rowBlock.innerHTML = `
+            <div class="status-row" style="background-color: #fafafa; border: 1px dashed #ccc; padding: 15px; flex-direction: column;">
+                <div style="font-size: 16px; font-weight: bold; color: #333; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 1px solid #ddd;">
+                    ${rowType.label} <span style="color:#888; font-size: 14px;">(${rowCards.reduce((sum, item) => sum + (item.card.qty||1), 0)})</span>
+                </div>
+                <div class="cards-horizontal-list deck-card-row" data-card-type="${rowType.key}"></div>
+            </div>
+        `;
+
+        const listDiv = rowBlock.querySelector(".cards-horizontal-list");
+
+        rowCards.forEach(({ card, index }) => {
+            const cardEl = document.createElement("div");
+            cardEl.className = "card-box";
+            cardEl.style.backgroundColor = card.bgColor || "#ffffff";
+            cardEl.setAttribute("draggable", true);
+            
+            const displayImg = card.img || "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
+            const displayName = card.name || "(未命名)";
+            
+            const qtyBadge = `<div class="deck-card-qty-badge">x${card.qty || 1}</div>`;
+
+            cardEl.innerHTML = `
+                <img src="${displayImg}" onerror="this.src='https://placehold.co/150x210/eaeaea/999999?text=Error'">
+                <div class="card-info">
+                    <strong>${displayName}</strong>
+                </div>
+                ${qtyBadge}
+                <button class="del-card-btn" title="從牌組移除">✕</button>
+                <button class="view-card-btn" title="放大預覽">🔍</button>
+            `;
+
+            cardEl.addEventListener("dragstart", (e) => {
+                draggedDeckCardIndex = index;
+                e.dataTransfer.effectAllowed = "move";
+                setTimeout(() => cardEl.classList.add("dragging"), 0);
+            });
+
+            cardEl.addEventListener("dragend", () => {
+                cardEl.classList.remove("dragging");
+                draggedDeckCardIndex = null;
+            });
+
+            cardEl.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                cardEl.classList.add("drag-over");
+            });
+
+            cardEl.addEventListener("dragleave", () => cardEl.classList.remove("drag-over"));
+
+            cardEl.addEventListener("drop", async (e) => {
+                e.preventDefault();
+                cardEl.classList.remove("drag-over");
+                await reorderDeckCards(index, rowType.key);
+            });
+
+            cardEl.addEventListener("click", () => {
+                openDeckCardModal(rowType.key, card, index);
+            });
+
+            cardEl.querySelector('.del-card-btn').addEventListener("click", async (e) => {
+                e.stopPropagation();
+                if (confirm(`確定要從牌組移除「${displayName}」嗎？`)) {
+                    const updatedTabs = tabs.map(tab => tab.id === activeTab.id
+                        ? { ...tab, cards: tab.cards.filter((_, cardIndex) => cardIndex !== index) }
+                        : tab
+                    );
+                    await saveDeckTabs(deck, updatedTabs);
+                }
+            });
+            cardEl.querySelector('.view-card-btn').addEventListener("click", (e) => {
+                e.stopPropagation();
+                document.getElementById("lightbox-img").src = displayImg;
+                document.getElementById("lightbox-modal").classList.add("show");
+            });
+
+            listDiv.appendChild(cardEl);
+        });
+
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-new-card-box";
+        addBtn.innerHTML = `<span style="font-size: 28px; margin-bottom: 5px;">+</span><span>新增卡片</span>`;
+        addBtn.addEventListener("click", () => {
+            openDeckCardModal(rowType.key);
+        });
+        listDiv.appendChild(addBtn);
+
+        listDiv.addEventListener("dragover", (e) => {
+            if (draggedDeckCardIndex === null) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+        });
+
+        listDiv.addEventListener("drop", async (e) => {
+            if (draggedDeckCardIndex === null || e.target.closest(".card-box")) return;
+            e.preventDefault();
+            await reorderDeckCards(null, rowType.key);
+        });
+
+        detailDeckRows.appendChild(rowBlock);
+    });
+
+    renderDeckReplacementSection(deck, tabs, activeTab);
+}
+
+function createReplacementCardElement(card, onEdit, onDelete = null) {
+    const cardEl = document.createElement("div");
+    cardEl.className = "replacement-card";
+    const displayImg = card?.img || "https://placehold.co/150x210/eaf5e5/729765?text=No+Image";
+    const displayName = card?.name || "尚未設定";
+    cardEl.innerHTML = `
+        <img src="${displayImg}" alt="${displayName}" onerror="this.src='https://placehold.co/150x210/eaf5e5/729765?text=Error'">
+        <div class="replacement-card-name">${displayName}</div>
+        ${onDelete ? '<button type="button" class="replacement-card-delete" title="移除替換卡">&times;</button>' : ""}
+        <button type="button" class="view-card-btn replacement-view-btn" title="放大預覽">🔍</button>
+    `;
+    cardEl.addEventListener("click", onEdit);
+    cardEl.querySelector(".replacement-card-delete")?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onDelete();
+    });
+    cardEl.querySelector(".replacement-view-btn").addEventListener("click", (e) => {
+        e.stopPropagation();
+        document.getElementById("lightbox-img").src = displayImg;
+        document.getElementById("lightbox-modal").classList.add("show");
+    });
+    return cardEl;
+}
+
+function renderDeckReplacementSection(deck, tabs, activeTab) {
+    const replacements = activeTab.replacements || [];
+    const section = document.createElement("section");
+    section.className = "deck-replacement-section";
+    section.innerHTML = `
+        <div class="deck-replacement-header">
+            <div>
+                <h3>可替換</h3>
+                <span>${replacements.length} 組</span>
+            </div>
+            <button type="button" class="btn-secondary add-replacement-group">＋ 新增替換組</button>
+        </div>
+        <div class="deck-replacement-groups"></div>
+    `;
+
+    const groupsHost = section.querySelector(".deck-replacement-groups");
+    replacements.forEach(group => {
+        const groupEl = document.createElement("div");
+        groupEl.className = "deck-replacement-group";
+
+        const sourceHost = document.createElement("div");
+        sourceHost.className = "deck-replacement-source";
+        const sources = getReplacementSources(group);
+        sources.forEach((card, sourceIndex) => {
+            sourceHost.appendChild(createReplacementCardElement(
+                card,
+                () => openDeckReplacementModal(group.id, "source", sourceIndex, card),
+                async () => {
+                    const updatedTabs = tabs.map(tab => tab.id === activeTab.id ? {
+                        ...tab,
+                        replacements: replacements.map(item => item.id === group.id ? {
+                            ...item,
+                            sources: getReplacementSources(item).filter((_, index) => index !== sourceIndex)
+                        } : item)
+                    } : tab);
+                    await saveDeckTabs(deck, updatedTabs);
+                }
+            ));
+        });
+        if (sources.length === 0) {
+            const firstSource = document.createElement("button");
+            firstSource.type = "button";
+            firstSource.className = "replacement-add-card replacement-first-source";
+            firstSource.innerHTML = `<span>＋</span><strong>新增基準卡</strong>`;
+            firstSource.addEventListener("click", () => openDeckReplacementModal(group.id, "source"));
+            sourceHost.appendChild(firstSource);
+        }
+
+        const arrow = document.createElement("div");
+        arrow.className = "deck-replacement-arrow";
+        arrow.innerHTML = `<span>→</span><span>←</span>`;
+        arrow.setAttribute("aria-label", "可互相替換");
+
+        const alternativesHost = document.createElement("div");
+        alternativesHost.className = "deck-replacement-alternatives";
+        (group.alternatives || []).forEach((card, alternativeIndex) => {
+            alternativesHost.appendChild(createReplacementCardElement(
+                card,
+                () => openDeckReplacementModal(group.id, "alternative", alternativeIndex, card),
+                async () => {
+                    const updatedTabs = tabs.map(tab => tab.id === activeTab.id ? {
+                        ...tab,
+                        replacements: replacements.map(item => item.id === group.id ? {
+                            ...item,
+                            alternatives: (item.alternatives || []).filter((_, index) => index !== alternativeIndex)
+                        } : item)
+                    } : tab);
+                    await saveDeckTabs(deck, updatedTabs);
+                }
+            ));
+        });
+
+        const addAlternative = document.createElement("button");
+        addAlternative.type = "button";
+        addAlternative.className = "replacement-add-card";
+        addAlternative.innerHTML = `<span>＋</span><strong>新增替換卡</strong>`;
+        addAlternative.addEventListener("click", () => openDeckReplacementModal(group.id, "alternative"));
+        alternativesHost.appendChild(addAlternative);
+
+        const deleteGroup = document.createElement("button");
+        deleteGroup.type = "button";
+        deleteGroup.className = "replacement-group-delete";
+        deleteGroup.title = "刪除替換組";
+        deleteGroup.innerHTML = "&times;";
+        deleteGroup.addEventListener("click", async () => {
+            if (!confirm("確定要刪除這組可替換卡片嗎？")) return;
+            const updatedTabs = tabs.map(tab => tab.id === activeTab.id
+                ? { ...tab, replacements: replacements.filter(item => item.id !== group.id) }
+                : tab
+            );
+            await saveDeckTabs(deck, updatedTabs);
+        });
+
+        groupEl.append(sourceHost, arrow, alternativesHost, deleteGroup);
+        groupsHost.appendChild(groupEl);
+    });
+
+    if (replacements.length === 0) {
+        groupsHost.innerHTML = `<div class="deck-replacement-empty">尚未建立可替換卡片組</div>`;
+    }
+
+    section.querySelector(".add-replacement-group").addEventListener("click", async () => {
+        const newGroup = {
+            id: `replacement-${Date.now()}`,
+            sources: [],
+            alternatives: []
+        };
+        const updatedTabs = tabs.map(tab => tab.id === activeTab.id
+            ? { ...tab, replacements: [...replacements, newGroup] }
+            : tab
+        );
+        await saveDeckTabs(deck, updatedTabs);
+        openDeckReplacementModal(newGroup.id, "source");
+    });
+
+    detailDeckRows.appendChild(section);
+}
+
+function renderDeckTabCoverEditor(deck, tabs, activeTab) {
+    detailDeckCover.title = "雙擊編輯左側大卡";
+    detailDeckCover.ondblclick = () => openDeckCoverModal(deck, activeTab);
+}
+
+function renderDeckTabsBar(deck, tabs, activeTab) {
+    const detailLayout = document.querySelector("#meta-deck-detail-view .deck-detail-layout");
+    metaDeckDetailView.querySelector(".deck-tabs-bar")?.remove();
+
+    const tabsBar = document.createElement("div");
+    tabsBar.className = "deck-tabs-bar";
+
+    tabs.forEach(tab => {
+        const tabBtn = document.createElement("button");
+        tabBtn.type = "button";
+        tabBtn.className = `deck-tab-btn ${tab.id === activeTab.id ? "active" : ""}`;
+        tabBtn.innerHTML = `<span class="deck-tab-name">${tab.name}</span>`;
+        tabBtn.addEventListener("click", () => {
+            clearTimeout(deckTabClickTimer);
+            deckTabClickTimer = setTimeout(() => {
+                activeDeckTabId = tab.id;
+                renderMetaDeckDetail();
+            }, 180);
+        });
+        tabBtn.addEventListener("dblclick", async (e) => {
+            e.stopPropagation();
+            clearTimeout(deckTabClickTimer);
+            const wrapper = e.currentTarget.closest(".deck-tab-wrapper");
+            const input = document.createElement("input");
+            input.type = "text";
+            input.className = "deck-tab-rename-input";
+            input.value = tab.name;
+            input.addEventListener("click", (event) => event.stopPropagation());
+            input.addEventListener("dblclick", (event) => event.stopPropagation());
+
+            let isFinished = false;
+            const finishRename = async (shouldSave) => {
+                if (isFinished) return;
+                isFinished = true;
+                const newName = input.value.trim();
+
+                if (shouldSave && newName && newName !== tab.name) {
+                    const updatedTabs = tabs.map(item => item.id === tab.id ? { ...item, name: newName } : item);
+                    await saveDeckTabs(deck, updatedTabs);
+                } else {
+                    renderMetaDeckDetail();
+                }
+            };
+
+            input.addEventListener("keydown", (event) => {
+                if (event.key === "Enter") finishRename(true);
+                if (event.key === "Escape") finishRename(false);
+            });
+            input.addEventListener("blur", () => finishRename(true));
+
+            wrapper.replaceChild(input, e.currentTarget);
+            input.focus();
+            input.select();
+        });
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.className = "deck-tab-tool";
+        deleteBtn.title = "刪除分頁";
+        deleteBtn.innerText = "×";
+        deleteBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            if (tabs.length <= 1) {
+                alert("至少需要保留一個分頁。");
+                return;
+            }
+            if (!confirm(`確定要刪除「${tab.name}」分頁嗎？`)) return;
+            const tabIndex = tabs.findIndex(item => item.id === tab.id);
+            const updatedTabs = tabs.filter(item => item.id !== tab.id);
+            if (activeDeckTabId === tab.id) {
+                activeDeckTabId = updatedTabs[Math.max(0, tabIndex - 1)]?.id || updatedTabs[0].id;
+            }
+            await saveDeckTabs(deck, updatedTabs);
+        });
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "deck-tab-wrapper";
+        wrapper.setAttribute("draggable", true);
+        wrapper.addEventListener("dragstart", (e) => {
+            draggedDeckTabId = tab.id;
+            e.dataTransfer.effectAllowed = "move";
+            setTimeout(() => wrapper.classList.add("dragging"), 0);
+        });
+        wrapper.addEventListener("dragend", () => {
+            wrapper.classList.remove("dragging");
+            draggedDeckTabId = null;
+        });
+        wrapper.addEventListener("dragover", (e) => {
+            if (!draggedDeckTabId || draggedDeckTabId === tab.id) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+            wrapper.classList.add("drag-over");
+        });
+        wrapper.addEventListener("dragleave", () => wrapper.classList.remove("drag-over"));
+        wrapper.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            wrapper.classList.remove("drag-over");
+            await reorderDeckTabs(deck, tabs, tab.id);
+        });
+        wrapper.appendChild(tabBtn);
+        wrapper.appendChild(deleteBtn);
+        tabsBar.appendChild(wrapper);
+    });
+
+    const addTabBtn = document.createElement("button");
+    addTabBtn.type = "button";
+    addTabBtn.className = "deck-tab-add-btn";
+    addTabBtn.innerText = "+";
+    addTabBtn.title = "新增分頁";
+    addTabBtn.addEventListener("click", async () => {
+        const newName = prompt("請輸入新分頁名稱", `牌組 ${tabs.length + 1}`);
+        if (!newName) return;
+        const newTab = {
+            id: `tab-${Date.now()}`,
+            name: newName.trim() || `牌組 ${tabs.length + 1}`,
+            coverCard: { ...(activeTab.coverCard || { name: "", img: activeTab.coverImg || deck.deckData?.coverImg || "" }) },
+            coverImg: activeTab.coverCard?.img || activeTab.coverImg || deck.deckData?.coverImg || "",
+            cards: cloneDeckCards(activeTab.cards || []),
+            replacements: cloneDeckReplacements(activeTab.replacements || [])
+        };
+        activeDeckTabId = newTab.id;
+        await saveDeckTabs(deck, [...tabs, newTab]);
+    });
+    tabsBar.appendChild(addTabBtn);
+
+    metaDeckDetailView.insertBefore(tabsBar, detailLayout);
+}
+
+function renderMetaLobbyTabs(tabs) {
+    const tabsHost = document.getElementById("meta-lobby-tabs");
+    tabsHost.innerHTML = "";
+
+    tabs.forEach(tab => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "deck-tab-wrapper";
+        wrapper.setAttribute("draggable", true);
+
+        const tabBtn = document.createElement("button");
+        tabBtn.type = "button";
+        tabBtn.className = `deck-tab-btn ${tab.id === activeMetaLobbyTabId ? "active" : ""}`;
+        tabBtn.innerHTML = `<span class="deck-tab-name">${tab.name}</span>`;
+        tabBtn.addEventListener("click", () => {
+            clearTimeout(metaLobbyTabClickTimer);
+            metaLobbyTabClickTimer = setTimeout(() => {
+                activeMetaLobbyTabId = tab.id;
+                renderMetaDecksList();
+            }, 180);
+        });
+        tabBtn.addEventListener("dblclick", (e) => {
+            e.stopPropagation();
+            clearTimeout(metaLobbyTabClickTimer);
+            openLobbyTabActions(e.currentTarget, tab, tabs);
+        });
+
+        wrapper.addEventListener("dragstart", (e) => {
+            draggedMetaLobbyTabId = tab.id;
+            e.dataTransfer.effectAllowed = "move";
+            setTimeout(() => wrapper.classList.add("dragging"), 0);
+        });
+        wrapper.addEventListener("dragend", () => {
+            wrapper.classList.remove("dragging");
+            draggedMetaLobbyTabId = null;
+        });
+        wrapper.addEventListener("dragover", (e) => {
+            if (!draggedMetaLobbyTabId || draggedMetaLobbyTabId === tab.id) return;
+            e.preventDefault();
+            wrapper.classList.add("drag-over");
+        });
+        wrapper.addEventListener("dragleave", () => wrapper.classList.remove("drag-over"));
+        wrapper.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            wrapper.classList.remove("drag-over");
+            const updatedTabs = [...tabs];
+            const fromIndex = updatedTabs.findIndex(item => item.id === draggedMetaLobbyTabId);
+            const toIndex = updatedTabs.findIndex(item => item.id === tab.id);
+            if (fromIndex === -1 || toIndex === -1) return;
+            const [movedTab] = updatedTabs.splice(fromIndex, 1);
+            updatedTabs.splice(toIndex, 0, movedTab);
+            await saveMetaLobbyTabs(updatedTabs);
+        });
+
+        wrapper.appendChild(tabBtn);
+        tabsHost.appendChild(wrapper);
+    });
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "deck-tab-add-btn";
+    addBtn.title = "新增版本";
+    addBtn.innerText = "+";
+    addBtn.addEventListener("click", () => createMetaLobbyTab(tabs));
+    tabsHost.appendChild(addBtn);
+}
+
+function openLobbyTabActions(tabBtn, tab, tabs) {
+    const wrapper = tabBtn.closest(".deck-tab-wrapper");
+    const actions = document.createElement("div");
+    actions.className = "meta-lobby-tab-actions";
+    actions.innerHTML = `
+        <button type="button" class="meta-lobby-action rename">更名</button>
+        <button type="button" class="meta-lobby-action delete">刪除</button>
+        <button type="button" class="meta-lobby-action cancel">取消</button>
+    `;
+
+    actions.querySelector(".rename").addEventListener("click", (e) => {
+        e.stopPropagation();
+        openInlineLobbyTabRename(actions, tab, tabs);
+    });
+    actions.querySelector(".delete").addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await deleteMetaLobbyTab(tab, tabs);
+    });
+    actions.querySelector(".cancel").addEventListener("click", (e) => {
+        e.stopPropagation();
+        renderMetaDecksList();
+    });
+
+    wrapper.replaceChild(actions, tabBtn);
+}
+
+async function deleteMetaLobbyTab(tab, tabs) {
+    if (tabs.length <= 1) {
+        alert("至少需要保留一個版本。");
+        renderMetaDecksList();
+        return;
+    }
+    if (!confirm(`確定要刪除「${tab.name}」及其中所有牌組嗎？`)) {
+        renderMetaDecksList();
+        return;
+    }
+
+    const decksToDelete = cardsData.filter(card => card.section === "meta_deck" && getDeckLobbyTabId(card) === tab.id);
+    await Promise.all(decksToDelete.map(deck => deleteDoc(doc(db, "ptcg_cards", deck.docId))));
+    const updatedTabs = tabs.filter(item => item.id !== tab.id);
+    if (activeMetaLobbyTabId === tab.id) activeMetaLobbyTabId = updatedTabs[0].id;
+    await saveMetaLobbyTabs(updatedTabs);
+}
+
+function openInlineLobbyTabRename(targetEl, tab, tabs) {
+    const wrapper = targetEl.closest(".deck-tab-wrapper");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "deck-tab-rename-input";
+    input.value = tab.name;
+    let finished = false;
+
+    const finish = async (save) => {
+        if (finished) return;
+        finished = true;
+        const newName = input.value.trim();
+        if (save && newName && newName !== tab.name) {
+            await saveMetaLobbyTabs(tabs.map(item => item.id === tab.id ? { ...item, name: newName } : item));
+        } else {
+            renderMetaDecksList();
+        }
+    };
+
+    input.addEventListener("click", e => e.stopPropagation());
+    input.addEventListener("keydown", e => {
+        if (e.key === "Enter") finish(true);
+        if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    wrapper.replaceChild(input, targetEl);
+    input.focus();
+    input.select();
+}
+
+async function createMetaLobbyTab(tabs) {
+    const newName = prompt("請輸入新版本名稱", `版本 ${tabs.length + 1}`);
+    if (!newName) return;
+
+    const newTab = { id: `lobby-${Date.now()}`, name: newName.trim() || `版本 ${tabs.length + 1}` };
+    const sourceDecks = cardsData.filter(card => card.section === "meta_deck" && getDeckLobbyTabId(card) === activeMetaLobbyTabId);
+    activeMetaLobbyTabId = newTab.id;
+    await saveMetaLobbyTabs([...tabs, newTab]);
+
+    await Promise.all(sourceDecks.map(deck => {
+        const copiedDeck = JSON.parse(JSON.stringify(deck));
+        delete copiedDeck.docId;
+        delete copiedDeck.altAccData;
+        delete copiedDeck.challenge24hData;
+        delete copiedDeck.neededCardsData;
+        delete copiedDeck.generalData;
+        delete copiedDeck.twoStarData;
+        copiedDeck.deckData = {
+            ...(copiedDeck.deckData || {}),
+            lobbyTabId: newTab.id,
+            order: copiedDeck.deckData?.order || Date.now()
+        };
+        return addDoc(cardsCollection, copiedDeck);
+    }));
+}
+
+async function reorderDeckTabs(deck, tabs, targetTabId) {
+    if (!draggedDeckTabId || draggedDeckTabId === targetTabId) return;
+
+    const updatedTabs = [...tabs];
+    const fromIndex = updatedTabs.findIndex(tab => tab.id === draggedDeckTabId);
+    const toIndex = updatedTabs.findIndex(tab => tab.id === targetTabId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    const [movedTab] = updatedTabs.splice(fromIndex, 1);
+    updatedTabs.splice(toIndex, 0, movedTab);
+    activeDeckTabId = movedTab.id;
+    await saveDeckTabs(deck, updatedTabs);
+}
+
+async function reorderDeckCards(targetIndex, targetType) {
+    const deck = cardsData.find(c => c.docId === activeMetaDeckId);
+    if (!deck || draggedDeckCardIndex === null) return;
+
+    const { tabs, activeTab } = getActiveDeckTab(deck);
+    const updatedCards = activeTab.cards ? [...activeTab.cards] : [];
+    const [movedCard] = updatedCards.splice(draggedDeckCardIndex, 1);
+    if (!movedCard) return;
+
+    movedCard.type = targetType;
+
+    let nextIndex = updatedCards.length;
+    if (targetIndex !== null) {
+        nextIndex = targetIndex;
+        if (draggedDeckCardIndex < targetIndex) nextIndex -= 1;
+    }
+
+    updatedCards.splice(nextIndex, 0, movedCard);
+    const updatedTabs = tabs.map(tab => tab.id === activeTab.id ? { ...tab, cards: updatedCards } : tab);
+    await saveDeckTabs(deck, updatedTabs);
+}
+
+// ==========================================
+// 🪄 渲染：二星卡
+// ==========================================
 function renderTwoStarCardsRows() {
     rarityRowsContainerTwoStar.innerHTML = "";
     
@@ -202,10 +1315,11 @@ function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, r
     cardsListDiv.className = "cards-horizontal-list";
 
     const filteredCards = cards.filter(c => {
-        if (currentTwoStarTab === "擁有的卡") return c.twoStarData?.status === filterVal;
-        if (currentTwoStarTab === "想要的卡" || currentTwoStarTab === "被交換的") return c.twoStarData?.type === filterVal;
+        if (currentTwoStarTab === "擁有的卡") return isTwoStarCardInRow(c, filterVal);
+        if (currentTwoStarTab === "想要的卡" || currentTwoStarTab === "被交換的") return isTwoStarCardInRow(c, filterVal);
         return false;
     });
+    statusRow.querySelector(".status-label").innerHTML = `${labelText} <span class="rarity-count">${getCardsQuantityTotal(filteredCards)}</span>`;
 
     filteredCards.forEach(card => {
         const cardEl = document.createElement("div");
@@ -260,6 +1374,7 @@ function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, r
         const displayImg = card.imageUrl ? card.imageUrl : "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
         const displayName = card.name ? card.name : "<span style='color:#ccc'>(未命名)</span>";
         const displayId = card.id ? `# ${card.id}` : "<span style='color:#ccc'>(無編號)</span>";
+        const qty = getCardQuantity(card);
 
         let quickTierBtnHtml = "";
         let tierBadgeHtml = "";
@@ -289,6 +1404,7 @@ function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, r
                 <strong>${displayName}</strong>
                 ${displayId}
                 ${tierBadgeHtml}
+                ${renderQtyControl(qty)}
             </div>
             <button class="del-card-btn" title="刪除卡片">✕</button>
             <button class="copy-card-btn" title="複製卡片">📄</button>
@@ -304,6 +1420,7 @@ function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, r
             });
         }
 
+        bindQtyControl(cardEl, card, "twoStarData.quantity", qty);
         cardEl.querySelector('.del-card-btn').addEventListener('click', async (e) => { e.stopPropagation(); if(confirm("確定要從雲端刪除這張卡片嗎？")) await deleteDoc(doc(db, "ptcg_cards", card.docId)); });
         cardEl.querySelector('.copy-card-btn').addEventListener('click', async (e) => { e.stopPropagation(); await handleSafeCopyCard(card); });
         cardEl.querySelector('.view-card-btn').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('lightbox-img').src = displayImg; document.getElementById('lightbox-modal').classList.add('show'); });
@@ -639,9 +1756,8 @@ function renderAltAccRows() {
         const targetCards = cardsData.filter(c => c.section === "alt_acc" && c.altAccData?.accountType === currentAccountTab && c.rarity === rarity.name);
         const rowBlock = document.createElement("div");
         rowBlock.className = "rarity-row-block";
-        rowBlock.innerHTML = `<div class="rarity-header"><img src="${rarity.icon}"><span>${rarity.name}</span></div>`;
+        rowBlock.innerHTML = `<div class="rarity-header"><img src="${rarity.icon}"><span>${rarity.name} <span class="rarity-count">${getCardsQuantityTotal(targetCards)}</span></span></div>`;
         createHorizontalRowAlt(rowBlock, targetCards, "false", "主帳沒有的", "not-on-main", rarity.name);
-        // 🪄 Bug Fix: 之前這裡也缺少了 hasMainVal，補上 "true" 參數
         createHorizontalRowAlt(rowBlock, targetCards, "true", "主帳有的", "on-main", rarity.name);
         rarityRowsContainerAlt.appendChild(rowBlock);
     });
@@ -665,17 +1781,35 @@ function createHorizontalRowAlt(parentBlock, cards, hasMainVal, labelText, class
         const displayImg = card.imageUrl ? card.imageUrl : "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
         const displayName = card.name ? card.name : "<span style='color:#ccc'>(未命名)</span>";
         const displayId = card.id ? `# ${card.id}` : "<span style='color:#ccc'>(無編號)</span>";
+        const qty = getCardQuantity(card);
 
         cardEl.innerHTML = `
             <button class="toggle-main-btn" title="切換主帳狀態">🔄</button>
             <img src="${displayImg}" onerror="this.src='https://placehold.co/150x210/eaeaea/999999?text=Error'">
-            <div class="card-info"><strong>${displayName}</strong>${displayId}</div>
+            <div class="card-info">
+                <strong>${displayName}</strong>
+                ${displayId}
+                ${renderQtyControl(qty)}
+            </div>
             <button class="del-card-btn" title="刪除卡片">✕</button>
             <button class="copy-card-btn" title="複製卡片">📄</button>
             <button class="view-card-btn" title="放大預覽">🔍</button>
         `;
 
-        cardEl.querySelector('.toggle-main-btn').addEventListener('click', async (e) => { e.stopPropagation(); const newStatus = (card.altAccData?.hasOnMain === "true") ? "false" : "true"; await updateDoc(doc(db, "ptcg_cards", card.docId), { altAccData: { accountType: card.altAccData?.accountType || "小帳", hasOnMain: newStatus }, section: "alt_acc" }); });
+        bindQtyControl(cardEl, card, "altAccData.quantity", qty);
+        cardEl.querySelector('.toggle-main-btn').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const newStatus = (card.altAccData?.hasOnMain === "true") ? "false" : "true";
+            await updateDoc(doc(db, "ptcg_cards", card.docId), {
+                altAccData: {
+                    ...(card.altAccData || {}),
+                    accountType: card.altAccData?.accountType || "小帳",
+                    hasOnMain: newStatus,
+                    quantity: getCardQuantity(card)
+                },
+                section: "alt_acc"
+            });
+        });
         cardEl.querySelector('.del-card-btn').addEventListener('click', async (e) => { e.stopPropagation(); if(confirm("確定要刪除？")) await deleteDoc(doc(db, "ptcg_cards", card.docId)); });
         cardEl.querySelector('.copy-card-btn').addEventListener('click', async (e) => { e.stopPropagation(); await handleSafeCopyCard(card); });
         cardEl.querySelector('.view-card-btn').addEventListener('click', (e) => { e.stopPropagation(); document.getElementById('lightbox-img').src = displayImg; document.getElementById('lightbox-modal').classList.add('show'); });
@@ -686,7 +1820,6 @@ function createHorizontalRowAlt(parentBlock, cards, hasMainVal, labelText, class
     const inlineAddBtn = document.createElement("div");
     inlineAddBtn.className = "add-new-card-box";
     inlineAddBtn.innerHTML = `<span style="font-size: 28px; margin-bottom: 5px;">+</span><span>新增卡片</span>`;
-    // 🪄 Bug Fix: 把 hasMainVal 傳入 openNewModal，這樣點「主帳有的」的新增按鈕就不會變回「沒有」了！
     inlineAddBtn.addEventListener("click", () => openNewModal(rarityName, null, hasMainVal));
     cardsListDiv.appendChild(inlineAddBtn);
 
@@ -695,7 +1828,7 @@ function createHorizontalRowAlt(parentBlock, cards, hasMainVal, labelText, class
 }
 
 // ==========================================
-// Modal 表單控制
+// Modal 表單控制 (單卡)
 // ==========================================
 function updateTierFieldVisibility() {
     const rarityVal = document.getElementById("card-rarity").value;
@@ -870,22 +2003,29 @@ cardForm.addEventListener("submit", async (e) => {
         };
         cardObj.rarity = ""; 
     } else if (saveSection === "two_star_cards") {
+        const existingQty = editingCardDocId ? getCardQuantity(cardsData.find(c => c.docId === editingCardDocId) || {}) : 1;
         cardObj.twoStarData = {
             tab: document.getElementById("card-two-star-tab").value,
             status: document.getElementById("card-two-star-status").value,
             type: document.getElementById("card-two-star-type").value,
             tier: rarityInput === "2星" ? document.getElementById("card-two-star-tier").value : "無", 
+            quantity: existingQty,
             order: editingCardDocId ? (cardsData.find(c => c.docId === editingCardDocId)?.twoStarData?.order || Date.now()) : Date.now()
         };
     } else {
-        cardObj.altAccData = { accountType: document.getElementById("card-acc-type").value, hasOnMain: document.getElementById("card-has-main").value };
+        const existingQty = editingCardDocId ? getCardQuantity(cardsData.find(c => c.docId === editingCardDocId) || {}) : 1;
+        cardObj.altAccData = {
+            accountType: document.getElementById("card-acc-type").value,
+            hasOnMain: document.getElementById("card-has-main").value,
+            quantity: existingQty
+        };
         if (rarityInput === "2星" || rarityInput === "2彩星") {
             cardObj.twoStarData = {
                 tab: "擁有的卡", 
-                // 🪄 Bug Fix: 永遠只存入卡片所屬的小帳或資源帳，這樣鏡像過去才不會迷路跑到「主帳」
                 status: document.getElementById("card-acc-type").value,
                 type: document.getElementById("card-two-star-type").value || "支援者",
                 tier: rarityInput === "2星" ? document.getElementById("card-two-star-tier").value : "無",
+                quantity: existingQty,
                 order: editingCardDocId ? (cardsData.find(c => c.docId === editingCardDocId)?.twoStarData?.order || Date.now()) : Date.now()
             };
         }
@@ -903,7 +2043,157 @@ cardForm.addEventListener("submit", async (e) => {
 });
 
 // ==========================================
-// 🪄 快速修改評級 (Mini Modal) 邏輯
+// 🪄 建立/編輯牌組 (Deck Form) 邏輯
+// ==========================================
+deckForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const submitBtn = deckForm.querySelector('button[type="submit"]');
+    submitBtn.innerText = "⏳ 儲存中...";
+    submitBtn.disabled = true;
+
+    const existingDeck = editingDeckDocId ? cardsData.find(c => c.docId === editingDeckDocId) : null;
+    const deckData = {
+        name: document.getElementById("deck-name").value.trim(),
+        coverImg: document.getElementById("deck-img").value.trim(),
+        tier: document.getElementById("deck-tier").value,
+        attribute: document.getElementById("deck-attribute").value,
+        cards: existingDeck?.deckData?.cards || [], 
+        order: existingDeck?.deckData?.order || Date.now(),
+        lobbyTabId: existingDeck ? getDeckLobbyTabId(existingDeck) : activeMetaLobbyTabId
+    };
+    if (existingDeck?.deckData?.tabs) deckData.tabs = existingDeck.deckData.tabs;
+    
+    if (editingDeckDocId) {
+        await updateDoc(doc(db, "ptcg_cards", editingDeckDocId), {
+            section: "meta_deck",
+            deckData
+        });
+    } else {
+        await addDoc(cardsCollection, {
+            section: "meta_deck",
+            deckData
+        });
+    }
+    
+    deckFormModal.classList.remove("show");
+    editingDeckDocId = null;
+    document.getElementById("deck-modal-title").innerText = "➕ 新增 Meta 牌組";
+    submitBtn.innerText = "儲存牌組";
+    submitBtn.disabled = false;
+});
+
+// ==========================================
+// 🪄 在牌組內加入單卡 (Deck Card Form) 邏輯
+// ==========================================
+deckCardForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!activeMetaDeckId) return;
+
+    const submitBtn = deckCardForm.querySelector('button[type="submit"]');
+    submitBtn.innerText = "⏳ 儲存中...";
+    submitBtn.disabled = true;
+
+    const deck = cardsData.find(c => c.docId === activeMetaDeckId);
+    if (deck) {
+        const newCard = {
+            name: document.getElementById("deck-card-name").value.trim(),
+            img: document.getElementById("deck-card-img").value.trim(),
+            type: getDeckCardType(document.getElementById("deck-card-type").value),
+            qty: parseInt(document.getElementById("deck-card-qty").value) || 1
+        };
+
+        const { tabs, activeTab } = getActiveDeckTab(deck);
+        const updatedCards = activeTab.cards ? [...activeTab.cards] : [];
+        if (editingDeckCardIndex === null) {
+            updatedCards.push(newCard);
+        } else {
+            updatedCards[editingDeckCardIndex] = newCard;
+        }
+
+        const updatedTabs = tabs.map(tab => tab.id === activeTab.id ? { ...tab, cards: updatedCards } : tab);
+        await saveDeckTabs(deck, updatedTabs);
+    }
+
+    deckCardFormModal.classList.remove("show");
+    editingDeckCardIndex = null;
+    document.querySelector("#deck-card-form-modal h2").innerText = "➕ 放入卡牌至牌組";
+    submitBtn.innerText = "加入牌組";
+    submitBtn.disabled = false;
+});
+
+deckCoverForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const deck = cardsData.find(c => c.docId === activeMetaDeckId);
+    if (!deck) return;
+
+    const { tabs, activeTab } = getActiveDeckTab(deck);
+    const coverCard = {
+        name: document.getElementById("deck-cover-name").value.trim(),
+        img: document.getElementById("deck-cover-img").value.trim()
+    };
+
+    const updatedTabs = tabs.map(tab => tab.id === activeTab.id
+        ? { ...tab, coverCard, coverImg: coverCard.img }
+        : tab
+    );
+    await saveDeckTabs(deck, updatedTabs);
+    deckCoverFormModal.classList.remove("show");
+});
+
+document.getElementById("add-second-source-card").addEventListener("click", () => {
+    if (!editingReplacementContext) return;
+    editingReplacementContext = {
+        groupId: editingReplacementContext.groupId,
+        role: "source",
+        alternativeIndex: null
+    };
+    deckReplacementForm.reset();
+    document.getElementById("deck-replacement-modal-title").innerText = "新增基準卡";
+    document.getElementById("add-second-source-card").style.display = "none";
+    document.getElementById("deck-replacement-name").focus();
+});
+
+deckReplacementForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const deck = cardsData.find(c => c.docId === activeMetaDeckId);
+    if (!deck || !editingReplacementContext) return;
+
+    const card = {
+        name: document.getElementById("deck-replacement-name").value.trim(),
+        img: document.getElementById("deck-replacement-img").value.trim()
+    };
+    const { tabs, activeTab } = getActiveDeckTab(deck);
+    const replacements = cloneDeckReplacements(activeTab.replacements || []);
+    let group = replacements.find(item => item.id === editingReplacementContext.groupId);
+
+    if (!group && editingReplacementContext.role === "source") {
+        group = { id: editingReplacementContext.groupId, sources: [], alternatives: [] };
+        replacements.push(group);
+    }
+    if (!group) return;
+
+    if (editingReplacementContext.role === "source") {
+        group.sources = getReplacementSources(group);
+        if (editingReplacementContext.alternativeIndex === null) {
+            group.sources.push(card);
+        } else {
+            group.sources[editingReplacementContext.alternativeIndex] = card;
+        }
+        delete group.source;
+    } else if (editingReplacementContext.alternativeIndex === null) {
+        group.alternatives.push(card);
+    } else {
+        group.alternatives[editingReplacementContext.alternativeIndex] = card;
+    }
+
+    const updatedTabs = tabs.map(tab => tab.id === activeTab.id ? { ...tab, replacements } : tab);
+    await saveDeckTabs(deck, updatedTabs);
+    editingReplacementContext = null;
+    deckReplacementFormModal.classList.remove("show");
+});
+
+// ==========================================
+// 快速修改評級 (Mini Modal) 邏輯
 // ==========================================
 let quickTierCardDocId = null;
 const quickTierModal = document.getElementById('quick-tier-modal');
@@ -922,8 +2212,9 @@ document.querySelectorAll('.tier-btn').forEach(btn => {
                 updatePayload = {
                     "twoStarData.tier": selectedTier,
                     "twoStarData.tab": targetCard.twoStarData?.tab || "擁有的卡",
-                    "twoStarData.status": targetCard.altAccData?.accountType || "小帳", // 🪄 安全防護：修改時也維持它的小帳身分
+                    "twoStarData.status": targetCard.altAccData?.accountType || "小帳",
                     "twoStarData.type": targetCard.twoStarData?.type || "支援者",
+                    "twoStarData.quantity": getCardQuantity(targetCard),
                     "twoStarData.order": targetCard.twoStarData?.order || Date.now()
                 };
             }
@@ -945,21 +2236,20 @@ colorSwatches.forEach(swatch => {
     });
 });
 
-// 🪄 智慧圖片下拉選單邏輯
+// 🪄 單卡建檔表單的智慧圖片選單
 const cardNameInput = document.getElementById("card-name");
 const autocompleteList = document.getElementById("custom-autocomplete-list");
 
 function renderAutocomplete(filterText = "") {
     autocompleteList.innerHTML = "";
-    const matchedNames = Object.keys(uniqueCardsDict).filter(name => name.toLowerCase().includes(filterText.toLowerCase()));
+    const matchedCards = getAutocompleteMatches(filterText);
     
-    if (matchedNames.length === 0) {
+    if (matchedCards.length === 0) {
         autocompleteList.classList.remove('show');
         return;
     }
 
-    matchedNames.forEach(name => {
-        const dictData = uniqueCardsDict[name];
+    matchedCards.forEach(({ name, data: dictData }) => {
         const itemDiv = document.createElement("div");
         itemDiv.className = "autocomplete-item";
         
@@ -996,7 +2286,6 @@ function renderAutocomplete(filterText = "") {
             if (matchSwatch) matchSwatch.classList.add("selected");
 
             autocompleteList.classList.remove('show');
-            
             cardForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
         });
 
@@ -1005,17 +2294,140 @@ function renderAutocomplete(filterText = "") {
     autocompleteList.classList.add('show');
 }
 
-cardNameInput.addEventListener("input", (e) => {
-    renderAutocomplete(e.target.value.trim());
-});
-cardNameInput.addEventListener("focus", (e) => {
-    renderAutocomplete(e.target.value.trim());
-});
+cardNameInput.addEventListener("input", (e) => renderAutocomplete(e.target.value.trim()));
+cardNameInput.addEventListener("focus", (e) => renderAutocomplete(e.target.value.trim()));
 
-document.addEventListener("click", (e) => {
-    if (e.target !== cardNameInput && !autocompleteList.contains(e.target)) {
-        autocompleteList.classList.remove('show');
+// 🪄 牌組加卡表單的智慧選單
+const deckCardNameInput = document.getElementById("deck-card-name");
+const deckAutocompleteList = document.getElementById("deck-autocomplete-list");
+
+function renderDeckCardAutocomplete(filterText = "") {
+    deckAutocompleteList.innerHTML = "";
+    const matchedCards = getAutocompleteMatches(filterText);
+    
+    if (matchedCards.length === 0) {
+        deckAutocompleteList.classList.remove('show');
+        return;
     }
+
+    matchedCards.forEach(({ name, data: dictData }) => {
+        const itemDiv = document.createElement("div");
+        itemDiv.className = "autocomplete-item";
+        
+        const imgUrl = dictData.imageUrl ? dictData.imageUrl : "https://placehold.co/60x84/eaeaea/999999?text=X";
+        const displayId = dictData.id ? `#${dictData.id}` : "(無編號)";
+
+        itemDiv.innerHTML = `
+            <img src="${imgUrl}" onerror="this.src='https://placehold.co/60x84/eaeaea/999999?text=X'">
+            <div class="ac-details">
+                <span class="ac-name">${name}</span>
+                <span class="ac-id">${displayId}</span>
+            </div>
+        `;
+
+        itemDiv.addEventListener("click", () => {
+            deckCardNameInput.value = name;
+            document.getElementById("deck-card-img").value = dictData.imageUrl || "";
+            deckAutocompleteList.classList.remove('show');
+            
+            deckCardForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        });
+
+        deckAutocompleteList.appendChild(itemDiv);
+    });
+    deckAutocompleteList.classList.add('show');
+}
+
+deckCardNameInput.addEventListener("input", (e) => renderDeckCardAutocomplete(e.target.value.trim()));
+deckCardNameInput.addEventListener("focus", (e) => renderDeckCardAutocomplete(e.target.value.trim()));
+
+const deckCoverNameInput = document.getElementById("deck-cover-name");
+const deckCoverAutocompleteList = document.getElementById("deck-cover-autocomplete-list");
+
+function renderDeckCoverAutocomplete(filterText = "") {
+    deckCoverAutocompleteList.innerHTML = "";
+    const matchedCards = getAutocompleteMatches(filterText);
+
+    if (matchedCards.length === 0) {
+        deckCoverAutocompleteList.classList.remove('show');
+        return;
+    }
+
+    matchedCards.forEach(({ name, data: dictData }) => {
+        const itemDiv = document.createElement("div");
+        itemDiv.className = "autocomplete-item";
+
+        const imgUrl = dictData.imageUrl ? dictData.imageUrl : "https://placehold.co/60x84/eaeaea/999999?text=X";
+        const displayId = dictData.id ? `#${dictData.id}` : "(無編號)";
+
+        itemDiv.innerHTML = `
+            <img src="${imgUrl}" onerror="this.src='https://placehold.co/60x84/eaeaea/999999?text=X'">
+            <div class="ac-details">
+                <span class="ac-name">${name}</span>
+                <span class="ac-id">${displayId}</span>
+            </div>
+        `;
+
+        itemDiv.addEventListener("click", () => {
+            deckCoverNameInput.value = name;
+            document.getElementById("deck-cover-img").value = dictData.imageUrl || "";
+            deckCoverAutocompleteList.classList.remove('show');
+        });
+
+        deckCoverAutocompleteList.appendChild(itemDiv);
+    });
+    deckCoverAutocompleteList.classList.add('show');
+}
+
+deckCoverNameInput.addEventListener("input", (e) => renderDeckCoverAutocomplete(e.target.value.trim()));
+deckCoverNameInput.addEventListener("focus", (e) => renderDeckCoverAutocomplete(e.target.value.trim()));
+
+const deckReplacementNameInput = document.getElementById("deck-replacement-name");
+const deckReplacementAutocompleteList = document.getElementById("deck-replacement-autocomplete-list");
+
+function renderDeckReplacementAutocomplete(filterText = "") {
+    deckReplacementAutocompleteList.innerHTML = "";
+    const matchedCards = getAutocompleteMatches(filterText);
+    if (matchedCards.length === 0) {
+        deckReplacementAutocompleteList.classList.remove("show");
+        return;
+    }
+
+    matchedCards.forEach(({ name, data: dictData }) => {
+        const itemDiv = document.createElement("div");
+        itemDiv.className = "autocomplete-item";
+        const imgUrl = dictData.imageUrl || "https://placehold.co/60x84/eaeaea/999999?text=X";
+        const displayId = dictData.id ? `#${dictData.id}` : "(無編號)";
+        itemDiv.innerHTML = `
+            <img src="${imgUrl}" onerror="this.src='https://placehold.co/60x84/eaeaea/999999?text=X'">
+            <div class="ac-details">
+                <span class="ac-name">${name}</span>
+                <span class="ac-id">${displayId}</span>
+            </div>
+        `;
+        itemDiv.addEventListener("mousedown", (e) => {
+            e.preventDefault();
+            deckReplacementNameInput.value = name;
+            document.getElementById("deck-replacement-img").value = dictData.imageUrl || "";
+            deckReplacementAutocompleteList.classList.remove("show");
+            deckReplacementAutocompleteList.innerHTML = "";
+            deckReplacementNameInput.blur();
+            deckReplacementForm.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
+        });
+        deckReplacementAutocompleteList.appendChild(itemDiv);
+    });
+    deckReplacementAutocompleteList.classList.add("show");
+}
+
+deckReplacementNameInput.addEventListener("input", (e) => renderDeckReplacementAutocomplete(e.target.value.trim()));
+deckReplacementNameInput.addEventListener("focus", (e) => renderDeckReplacementAutocomplete(e.target.value.trim()));
+
+// 點擊外面時關閉選單
+document.addEventListener("click", (e) => {
+    if (e.target !== cardNameInput && !autocompleteList.contains(e.target)) autocompleteList.classList.remove('show');
+    if (e.target !== deckCardNameInput && !deckAutocompleteList.contains(e.target)) deckAutocompleteList.classList.remove('show');
+    if (e.target !== deckCoverNameInput && !deckCoverAutocompleteList.contains(e.target)) deckCoverAutocompleteList.classList.remove('show');
+    if (e.target !== deckReplacementNameInput && !deckReplacementAutocompleteList.contains(e.target)) deckReplacementAutocompleteList.classList.remove('show');
 });
 
 colorInput.addEventListener("input", () => colorSwatches.forEach(s => s.classList.remove("selected")));
@@ -1058,10 +2470,42 @@ document.getElementById("card-two-star-tab").addEventListener("change", (e) => {
 
 const lightboxModal = document.getElementById('lightbox-modal');
 document.getElementById('close-modal').addEventListener("click", () => formModal.classList.remove("show"));
+document.getElementById('close-deck-modal').addEventListener("click", () => {
+    editingDeckDocId = null;
+    document.getElementById("deck-modal-title").innerText = "➕ 新增 Meta 牌組";
+    deckFormModal.classList.remove("show");
+});
+document.getElementById('close-deck-card-modal').addEventListener("click", () => {
+    editingDeckCardIndex = null;
+    document.querySelector("#deck-card-form-modal h2").innerText = "➕ 放入卡牌至牌組";
+    deckCardForm.querySelector('button[type="submit"]').innerText = "加入牌組";
+    deckCardFormModal.classList.remove("show");
+});
+document.getElementById('close-deck-cover-modal').addEventListener("click", () => deckCoverFormModal.classList.remove("show"));
+document.getElementById('close-deck-replacement-modal').addEventListener("click", () => {
+    editingReplacementContext = null;
+    deckReplacementFormModal.classList.remove("show");
+});
 document.getElementById('lightbox-close').addEventListener('click', () => lightboxModal.classList.remove('show'));
 
 window.addEventListener("click", (e) => { 
     if (e.target === formModal) formModal.classList.remove("show"); 
+    if (e.target === deckFormModal) {
+        editingDeckDocId = null;
+        document.getElementById("deck-modal-title").innerText = "➕ 新增 Meta 牌組";
+        deckFormModal.classList.remove("show");
+    } 
+    if (e.target === deckCardFormModal) {
+        editingDeckCardIndex = null;
+        document.querySelector("#deck-card-form-modal h2").innerText = "➕ 放入卡牌至牌組";
+        deckCardForm.querySelector('button[type="submit"]').innerText = "加入牌組";
+        deckCardFormModal.classList.remove("show");
+    } 
+    if (e.target === deckCoverFormModal) deckCoverFormModal.classList.remove("show"); 
+    if (e.target === deckReplacementFormModal) {
+        editingReplacementContext = null;
+        deckReplacementFormModal.classList.remove("show");
+    }
     if (e.target === lightboxModal) lightboxModal.classList.remove('show');
     if (e.target === quickTierModal) quickTierModal.classList.remove('show');
 });
@@ -1078,7 +2522,16 @@ onSnapshot(cardsCollection, (snapshot) => {
         const data = doc.data();
         const section = data.section || "alt_acc";
         
-        let altAccData = data.altAccData || (section === "alt_acc" ? { accountType: data.accountType, hasOnMain: data.hasOnMain } : null);
+        let altAccData = null;
+        if (section === "alt_acc") {
+            altAccData = {
+                accountType: data.accountType || currentAccountTab || "小帳",
+                hasOnMain: data.hasOnMain || "false",
+                ...(data.altAccData || {})
+            };
+        } else {
+            altAccData = data.altAccData || null;
+        }
         let challenge24hData = data.challenge24hData || (section === "24h" ? { ownership: data.ownership } : null);
         let neededCardsData = data.neededCardsData || (section === "needed_cards" ? { quantity: data.quantity || 1, order: data.order || Date.now(), tab: data.tab || "缺少的卡" } : null);
         let generalData = data.generalData || (section === "general_cards" ? { type: data.type || "支援者", order: data.order || Date.now(), hasOnMain: data.hasOnMain || "false" } : null);
@@ -1090,29 +2543,35 @@ onSnapshot(cardsCollection, (snapshot) => {
             tier: data.tier || "無", 
             order: data.order || Date.now() 
         } : null);
+        if (twoStarData?.status === "本帳") twoStarData.status = "主帳";
 
-        // 🪄 Bug Fix 2：小帳資源的 2星卡，完全依照它自己的「小帳/資源帳」屬性映射到「擁有的卡」
         if (section === "alt_acc" && (data.rarity === "2星" || data.rarity === "2彩星")) {
             twoStarData = twoStarData ? { ...twoStarData } : {};
             twoStarData.tab = "擁有的卡";
-            // 永遠映射到它真實的帳號，不再被 hasOnMain 干擾！
             twoStarData.status = altAccData?.accountType || "小帳"; 
             if (!twoStarData.order) twoStarData.order = Date.now();
             if (!twoStarData.tier) twoStarData.tier = "無";
+            if (!twoStarData.quantity) twoStarData.quantity = altAccData?.quantity || 1;
         }
 
-        if (data.name) {
-            if (!uniqueCardsDict[data.name]) {
-                uniqueCardsDict[data.name] = {
-                    id: data.id || "",
-                    imageUrl: data.imageUrl || "",
-                    rarity: data.rarity || "1星",
-                    bgColor: data.bgColor || "#ffffff"
-                };
-            } else {
-                if (!uniqueCardsDict[data.name].imageUrl && data.imageUrl) uniqueCardsDict[data.name].imageUrl = data.imageUrl;
-                if (!uniqueCardsDict[data.name].id && data.id) uniqueCardsDict[data.name].id = data.id;
-            }
+        addUniqueCardToDict(data);
+
+        if (section === "meta_deck" && data.deckData) {
+            const deckCards = Array.isArray(data.deckData.cards) ? data.deckData.cards : [];
+            deckCards.forEach(card => addUniqueCardToDict(card));
+
+            const deckTabs = Array.isArray(data.deckData.tabs) ? data.deckData.tabs : [];
+            deckTabs.forEach(tab => {
+                if (tab.coverCard) addUniqueCardToDict({ name: tab.coverCard.name, img: tab.coverCard.img || tab.coverImg });
+                if (tab.coverName || tab.coverImg) addUniqueCardToDict({ name: tab.coverName, img: tab.coverImg });
+                if (Array.isArray(tab.cards)) tab.cards.forEach(card => addUniqueCardToDict(card));
+                if (Array.isArray(tab.replacements)) {
+                    tab.replacements.forEach(group => {
+                        getReplacementSources(group).forEach(card => addUniqueCardToDict(card));
+                        if (Array.isArray(group.alternatives)) group.alternatives.forEach(card => addUniqueCardToDict(card));
+                    });
+                }
+            });
         }
 
         return { docId: doc.id, ...data, section, altAccData, challenge24hData, neededCardsData, generalData, twoStarData };

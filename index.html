@@ -16,7 +16,7 @@
             <ul id="sidebar-menu" class="sidebar-menu">
                 <li><span class="nav-icon">✨</span><span class="nav-text">稀有度</span></li>
                 <li><span class="nav-icon">📦</span><span class="nav-text">系列卡包</span></li>
-                <li><span class="nav-icon">🔥</span><span class="nav-text">Meta卡組</span></li>
+                <li id="nav-meta-decks"><span class="nav-icon">🔥</span><span class="nav-text">Meta牌組</span></li>
                 <li id="nav-needed-cards"><span class="nav-icon">🎯</span><span class="nav-text">需要卡</span></li>
                 <li id="nav-general-cards"><span class="nav-icon">🛠️</span><span class="nav-text">泛用卡</span></li>
                 <li id="nav-two-star-cards"><span class="nav-icon">🌟</span><span class="nav-text">二星</span></li>
@@ -66,16 +66,46 @@
                 </div>
                 <div id="rarity-rows-two-star-container" class="rarity-rows-container"></div>
             </section>
+
+            <section id="view-meta-decks" class="content-section" style="display: none;">
+                <div id="meta-decks-list-view">
+                    <div id="meta-lobby-tabs" class="deck-tabs-bar meta-lobby-tabs"></div>
+                    <div class="deck-tier-block" id="tier-1-block">
+                        <h2 class="deck-tier-heading">🏆 Tier 1</h2>
+                        <div class="decks-grid" id="tier-1-grid"></div>
+                    </div>
+                    <div class="deck-tier-block" id="tier-2-block">
+                        <h2 class="deck-tier-heading">⚔️ Tier 2</h2>
+                        <div class="decks-grid" id="tier-2-grid"></div>
+                    </div>
+                    <div class="deck-tier-block" id="tier-3-block">
+                        <h2 class="deck-tier-heading">🛡️ Tier 3 & 有趣牌組</h2>
+                        <div class="decks-grid" id="tier-3-grid"></div>
+                    </div>
+                </div>
+
+                <div id="meta-deck-detail-view" style="display: none;">
+                    <div style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
+                        <button id="btn-back-decks" class="btn-secondary">🔙 返回牌組列表</button>
+                        <h2 id="detail-deck-title" style="margin: 0; color: #007aff;"></h2>
+                    </div>
+                    <div class="deck-detail-layout">
+                        <div class="deck-detail-left">
+                            <img id="detail-deck-cover" src="" alt="王牌寶可夢" onerror="this.src='https://placehold.co/300x420/eaeaea/999999?text=Cover'">
+                        </div>
+                        <div class="deck-detail-right" id="detail-deck-rows">
+                            </div>
+                    </div>
+                </div>
+            </section>
         </main>
     </div>
 
-    <!-- 表單 Modal -->
     <div id="form-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" id="close-modal">&times;</span>
             <h2 id="modal-title">➕ 新增卡片資料</h2>
             <form id="card-form">
-                <!-- 🪄 將名稱輸入框改為自訂的圖片選單容器 -->
                 <div class="input-group" style="position: relative;">
                     <label>寶可夢名稱：</label>
                     <input type="text" id="card-name" placeholder="例如: 妙蛙種子" autocomplete="off">
@@ -222,7 +252,117 @@
         </div>
     </div>
 
-    <!-- 快速修改評級專用的迷你 Modal -->
+    <div id="deck-form-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-deck-modal">&times;</span>
+            <h2 id="deck-modal-title">➕ 新增 Meta 牌組</h2>
+            <form id="deck-form">
+                <div class="input-group">
+                    <label>牌組名稱：</label>
+                    <input type="text" id="deck-name" placeholder="例如: 皮卡丘EX快攻" required>
+                </div>
+                <div class="input-group">
+                    <label>王牌封面圖片網址：</label>
+                    <input type="url" id="deck-img" placeholder="請貼上封面圖片網址" required>
+                </div>
+                <div class="input-group">
+                    <label>所屬強度 (Tier)：</label>
+                    <select id="deck-tier">
+                        <option value="Tier 1">Tier 1</option>
+                        <option value="Tier 2">Tier 2</option>
+                        <option value="Tier 3">Tier 3 & 其他</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>主屬性：</label>
+                    <select id="deck-attribute">
+                        <option value="草">草</option>
+                        <option value="火">火</option>
+                        <option value="水">水</option>
+                        <option value="電">電</option>
+                        <option value="超">超能</option>
+                        <option value="鬥">鬥</option>
+                        <option value="惡">惡</option>
+                        <option value="鋼">鋼</option>
+                        <option value="無">無</option>
+                        <option value="龍">龍</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">儲存牌組</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="deck-card-form-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-deck-card-modal">&times;</span>
+            <h2>➕ 放入卡牌至牌組</h2>
+            <form id="deck-card-form">
+                <div class="input-group" style="position: relative;">
+                    <label>搜尋寶可夢名稱：</label>
+                    <input type="text" id="deck-card-name" placeholder="例如: 妙蛙種子" autocomplete="off" required>
+                    <div id="deck-autocomplete-list" class="autocomplete-dropdown"></div>
+                </div>
+                <div class="input-group">
+                    <label>圖片網址：</label>
+                    <input type="url" id="deck-card-img" placeholder="請貼上封面圖片網址">
+                </div>
+                <div class="input-group">
+                    <label>卡牌種類：</label>
+                    <select id="deck-card-type">
+                        <option value="寶可夢">寶可夢</option>
+                        <option value="支援者">支援者</option>
+                        <option value="物品、道具、競技場">物品、道具、競技場</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>投入數量：</label>
+                    <input type="number" id="deck-card-qty" value="2" min="1" max="2" required>
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">加入牌組</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="deck-cover-form-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-deck-cover-modal">&times;</span>
+            <h2>✏️ 編輯左側大卡</h2>
+            <form id="deck-cover-form">
+                <div class="input-group" style="position: relative;">
+                    <label>卡片名稱：</label>
+                    <input type="text" id="deck-cover-name" placeholder="例如: 超級阿勃梭魯ex" autocomplete="off">
+                    <div id="deck-cover-autocomplete-list" class="autocomplete-dropdown"></div>
+                </div>
+                <div class="input-group">
+                    <label>圖片網址：</label>
+                    <input type="url" id="deck-cover-img" placeholder="請貼上左側大卡圖片網址">
+                </div>
+                <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">儲存左側大卡</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="deck-replacement-form-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-deck-replacement-modal">&times;</span>
+            <h2 id="deck-replacement-modal-title">編輯可替換卡片</h2>
+            <form id="deck-replacement-form">
+                <div class="input-group" style="position: relative;">
+                    <label>卡片名稱：</label>
+                    <input type="text" id="deck-replacement-name" placeholder="輸入卡片名稱" autocomplete="off" required>
+                    <div id="deck-replacement-autocomplete-list" class="autocomplete-dropdown"></div>
+                </div>
+                <div class="input-group">
+                    <label>圖片網址：</label>
+                    <input type="url" id="deck-replacement-img" placeholder="輸入卡片圖片網址">
+                </div>
+                <button type="button" id="add-second-source-card" class="btn-secondary" style="display:none; width:100%; margin-top: 10px;">＋ 新增基準卡</button>
+                <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">儲存卡片</button>
+            </form>
+        </div>
+    </div>
+
     <div id="quick-tier-modal" class="modal">
         <div class="modal-content" style="width: 260px; text-align: center; padding: 20px;">
             <span class="close-btn" id="close-quick-tier-modal">&times;</span>

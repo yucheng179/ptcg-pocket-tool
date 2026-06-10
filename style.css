@@ -85,6 +85,8 @@ body { margin: 0; font-family: sans-serif; background-color: #f0f3f6; color: #33
 .main-content { flex: 1; padding: 30px; overflow-y: auto; }
 header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .btn-primary { background: #007aff; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold;}
+.btn-secondary { background: #fff; color: #555; border: 1px solid #ddd; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+.btn-secondary:hover { background: #f0f0f0; }
 
 /* =========================================
    頂部頁籤 (小帳 / 資源帳)
@@ -168,86 +170,37 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .lightbox-close:hover { color: #ff3b30; }
 
 /* =========================================
-   24H 得卡挑戰 專用樣式
+   各區塊專屬樣式 (24H得卡, 需要的卡, 泛用卡, 二星)
    ========================================= */
 .version-container { margin-bottom: 20px; display: flex; align-items: center; font-size: 18px; font-weight: bold; color: #444; }
 .version-container img { height: 28px; margin-left: 10px; object-fit: contain; }
 .rarity-count { display: inline-block; background-color: #f0f0f0; color: #888; font-size: 14px; font-weight: normal; padding: 2px 8px; border-radius: 12px; margin-left: 8px; vertical-align: middle; }
 
-/* =========================================
-   需要卡 專用樣式 (數量增減控制)
-   ========================================= */
 .qty-control { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed #ccc; }
 .qty-btn { background: #f0f0f0; border: none; border-radius: 6px; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #333; font-size: 16px; transition: background 0.2s;}
 .qty-btn:hover { background: #e0e0e0; }
 .qty-number { font-weight: bold; color: #ff3b30; font-size: 16px; min-width: 20px;}
 
-/* =========================================
-   泛用卡 專屬樣式設定區
-   ========================================= */
 .status-row.general-row-top { background-color: #f6ffed; border: 1px dashed #b7eb8f; }
 .status-row.general-row-bottom { background-color: #fff1f0; border: 1px dashed #ffa39e; }
-.rarity-header span.general-header-title {
-    font-size: 20px;        
-    font-weight: 600;       
-    letter-spacing: 2px;      
-}
+.rarity-header span.general-header-title { font-size: 20px; font-weight: 600; letter-spacing: 2px; }
 
-/* =========================================
-   二星卡 專屬狀態列底色
-   ========================================= */
-.status-row.two-star-main { background-color: #f6ffed; border: 1px dashed #b7eb8f; } /* 主帳：綠 */
-.status-row.two-star-alt { background-color: #fff7e6; border: 1px dashed #ffd591; }  /* 小帳：橘 */
-.status-row.two-star-res { background-color: #e6f7ff; border: 1px dashed #91d5ff; }  /* 資源：藍 */
+.status-row.two-star-main { background-color: #f6ffed; border: 1px dashed #b7eb8f; } 
+.status-row.two-star-alt { background-color: #fff7e6; border: 1px dashed #ffd591; }  
+.status-row.two-star-res { background-color: #e6f7ff; border: 1px dashed #91d5ff; }  
 
-/* =========================================
-   二星卡 專屬評級標籤樣式
-   ========================================= */
-.tier-badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: bold;
-    color: white;
-    letter-spacing: 0.5px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-.tier-ss { background: #ff4d4f; } /* 閃耀紅 */
-.tier-s { background: #fa8c16; }  /* 橘色 */
-.tier-a { background: #fadb14; color: #555; } /* 金黃色 */
-.tier-b { background: #52c41a; } /* 綠色 */
-.tier-c { background: #1890ff; } /* 藍色 */
-.tier-de { background: #d9d9d9; color: #555; } /* 紫色 */
-.tier-default { background: #d9d9d9; color: #555; box-shadow: none;} /* 灰色未評級 */
+.tier-badge { display: inline-block; padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: bold; color: white; letter-spacing: 0.5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+.tier-ss { background: #ff4d4f; }
+.tier-s { background: #fa8c16; }
+.tier-a { background: #fadb14; color: #555; }
+.tier-b { background: #52c41a; }
+.tier-c { background: #1890ff; }
+.tier-de { background: #d9d9d9; color: #555; }
+.tier-default { background: #d9d9d9; color: #555; box-shadow: none;}
 
-/* 迷你快速評級選單內的按鈕 */
-.quick-tier-options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    justify-content: center;
-    margin-top: 15px;
-}
-.tier-btn {
-    border: none;
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: bold;
-    color: white;
-    cursor: pointer;
-    transition: transform 0.1s;
-    width: 45%;
-}
+.quick-tier-options { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 15px; }
+.tier-btn { border: none; padding: 8px 12px; border-radius: 8px; font-size: 14px; font-weight: bold; color: white; cursor: pointer; transition: transform 0.1s; width: 45%; }
 .tier-btn:hover { transform: scale(1.05); }
-.tier-btn.tier-ss { background: #ff4d4f; }
-.tier-btn.tier-s { background: #fa8c16; }
-.tier-btn.tier-a { background: #fadb14; color: #555; }
-.tier-btn.tier-b { background: #52c41a; }
-.tier-btn.tier-c { background: #1890ff; }
-.tier-btn.tier-de { background: #d9d9d9; color: #555; }
-.tier-btn.tier-default { background: #d9d9d9; color: #555; }
 
 /* =========================================
    🪄 自訂圖片智慧選單 (Autocomplete Dropdown)
@@ -278,7 +231,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .autocomplete-item:last-child { border-bottom: none; }
 .autocomplete-item:hover { background-color: #f0f7ff; }
 
-/* 🪄 放大 2 倍的圖片與相應微調字體 */
+/* 放大 2 倍的圖片與相應微調字體 */
 .autocomplete-item img {
     width: 60px;       /* 30px * 2 */
     height: 84px;      /* 42px * 2 */
@@ -291,3 +244,460 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .autocomplete-item .ac-details { display: flex; flex-direction: column; }
 .autocomplete-item .ac-name { font-weight: bold; font-size: 16px; color: #333; }
 .autocomplete-item .ac-id { font-size: 13px; color: #888; margin-top: 4px;}
+
+/* =========================================
+   🪄 Meta 牌組專屬排版 (Level 1 & Level 2)
+   ========================================= */
+
+/* 大廳：Tier 區塊標題 */
+.deck-tier-heading { font-size: 22px; color: #333; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 2px solid #ddd; }
+.deck-tier-block { margin-bottom: 40px; }
+
+/* 大廳：Deck Box 網格排列 */
+.decks-grid { display: flex; flex-wrap: wrap; gap: 20px; }
+
+/* 大廳：單一 Deck Box 外觀 */
+.deck-box-container {
+    width: 200px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    overflow: hidden;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    position: relative;
+    border: 1px solid #eee;
+}
+.deck-box-container.dragging { opacity: 0.45; border: 2px dashed #007aff; }
+.deck-box-container.drag-over, .card-box.drag-over { transform: translateY(-4px) scale(1.02); box-shadow: 0 10px 22px rgba(0,0,0,0.16); }
+.deck-box-container.attr-grass { background: #edf9e8; border-color: #95d475; }
+.deck-box-container.attr-fire { background: #ffe9e6; border-color: #ff9d8f; }
+.deck-box-container.attr-water { background: #e5f5ff; border-color: #74c4f6; }
+.deck-box-container.attr-lightning { background: #fff8d8; border-color: #f6d65f; }
+.deck-box-container.attr-psychic { background: #f4e9ff; border-color: #c798ef; }
+.deck-box-container.attr-fighting { background: #fff0df; border-color: #e5b071; }
+.deck-box-container.attr-dark { background: #c6ded4; border-color: #6f9988; }
+.deck-box-container.attr-metal { background: #eceff1; border-color: #aeb6bd; }
+.deck-box-container.attr-colorless { background: #f3f3f3; border-color: #cfcfcf; }
+.deck-box-container.attr-dragon { background: #f1e0c7; border-color: #c7a06e; }
+.deck-box-container:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.12);
+}
+.deck-box-cover-wrap {
+    padding: 10px 10px 0;
+    cursor: pointer;
+}
+.deck-box-cover {
+    width: 100%;
+    aspect-ratio: 5/7;
+    object-fit: cover;
+    background: #fafafa;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    display: block;
+}
+.deck-box-info {
+    padding: 12px;
+    text-align: center;
+    cursor: pointer;
+}
+.deck-box-name {
+    font-size: 16px;
+    font-weight: bold;
+    color: #222;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.deck-attr-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    font-size: 16px;
+    font-weight: bold;
+    background: rgba(255,255,255,0.75);
+    color: #555;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.12);
+}
+.deck-attr-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    display: block;
+}
+/* 牌組刪除按鈕 */
+.del-deck-btn {
+    position: absolute;
+    top: 8px; right: 8px;
+    background: #ff3b30; color: white; border: none; border-radius: 50%;
+    width: 24px; height: 24px; font-size: 12px; cursor: pointer;
+    display: none; align-items: center; justify-content: center; box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
+.deck-box-container:hover .del-deck-btn { display: flex; }
+
+/* 新增牌組按鈕 */
+.add-new-deck-box {
+    width: 200px;
+    background: rgba(255, 255, 255, 0.5);
+    border: 2px dashed #ccc;
+    border-radius: 12px;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    cursor: pointer; color: #888; font-size: 16px; transition: all 0.2s;
+    min-height: 280px;
+}
+.add-new-deck-box:hover {
+    background: #f0f7ff; border-color: #007aff; color: #007aff;
+}
+
+/* 內層：左側大圖與右側清單佈局 */
+.deck-detail-layout {
+    display: flex;
+    gap: 30px;
+    align-items: flex-start;
+}
+.deck-detail-left {
+    width: 300px;
+    flex-shrink: 0;
+}
+.deck-detail-left img {
+    width: 100%;
+    aspect-ratio: 5 / 7;
+    object-fit: cover;
+    background: #fafafa;
+    border-radius: 12px;
+    padding: 10px;
+    box-sizing: border-box;
+    border: 1px solid #e8e8e8;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    cursor: pointer;
+}
+.deck-detail-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+.deck-tabs-bar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    border-bottom: 2px solid #ddd;
+    width: 100%;
+}
+.deck-tab-wrapper {
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+}
+.deck-tab-wrapper.dragging {
+    opacity: 0.45;
+}
+.deck-tab-wrapper.drag-over {
+    background: #eef5ff;
+    border-radius: 8px;
+    box-shadow: inset 0 -3px 0 #007aff;
+}
+.deck-tab-btn,
+.deck-tab-tool,
+.deck-tab-add-btn {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-weight: bold;
+}
+.deck-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 10px 11px;
+    color: #888;
+    font-size: 15px;
+    border-bottom: 3px solid transparent;
+}
+.deck-tab-btn.active {
+    color: #007aff;
+    border-bottom-color: #007aff;
+}
+.deck-tab-rename-input {
+    width: 120px;
+    padding: 8px 10px;
+    border: 1px solid #007aff;
+    border-radius: 6px;
+    color: #007aff;
+    font-size: 15px;
+    font-weight: bold;
+    outline: none;
+    background: #fff;
+}
+.deck-tab-tool {
+    width: 24px;
+    height: 28px;
+    color: #999;
+    border-radius: 6px;
+    margin-left: -8px;
+}
+.deck-tab-tool:hover {
+    background: #eef5ff;
+    color: #007aff;
+}
+.deck-tab-add-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px dashed #bfbfbf;
+    background: transparent;
+    color: #007aff;
+    font-size: 20px;
+    line-height: 1;
+    margin-bottom: 5px;
+}
+.deck-tab-add-btn:hover {
+    background: #f0f7ff;
+    border-color: #007aff;
+}
+.meta-lobby-tabs {
+    margin-bottom: 28px;
+}
+.meta-lobby-tabs .deck-tab-btn {
+    min-width: 90px;
+    justify-content: center;
+    padding-left: 22px;
+    padding-right: 22px;
+}
+.meta-lobby-tab-actions {
+    min-width: 190px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid #d9d9d9;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+}
+.meta-lobby-action {
+    flex: 1;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 8px;
+    background: #f5f5f5;
+    color: #555;
+    cursor: pointer;
+    font-weight: bold;
+}
+.meta-lobby-action:hover {
+    background: #e6f2ff;
+    color: #007aff;
+}
+.meta-lobby-action.delete:hover {
+    background: #fff1f0;
+    color: #ff3b30;
+}
+
+/* 內層：卡片右下角的數量標籤 */
+.deck-card-qty-badge {
+    position: absolute;
+    bottom: 44px;
+    right: 8px;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1;
+    padding: 4px 7px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.3);
+    z-index: 5;
+    pointer-events: none;
+}
+
+.deck-replacement-section {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 20px;
+    border: 1px solid #b9dca9;
+    border-radius: 8px;
+    background: #eef9e9;
+}
+.deck-replacement-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.deck-replacement-header > div {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.deck-replacement-header h3 {
+    margin: 0;
+    color: #315b2e;
+    font-size: 20px;
+}
+.deck-replacement-header span,
+.deck-replacement-empty {
+    color: #6c8b66;
+    font-size: 14px;
+}
+.deck-replacement-groups {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.deck-replacement-group {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+    padding: 18px 42px 18px 18px;
+    border: 1px dashed #a8ce98;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.7);
+}
+.deck-replacement-source {
+    display: flex;
+    align-items: flex-start;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 14px;
+    max-width: 266px;
+}
+.deck-replacement-alternatives {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 14px;
+    min-width: 0;
+}
+.deck-replacement-arrow {
+    flex: 0 0 42px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #4b7b45;
+    font-size: 27px;
+    font-weight: bold;
+    line-height: 0.75;
+}
+.replacement-card,
+.replacement-add-card {
+    position: relative;
+    width: 126px;
+    min-height: 218px;
+    box-sizing: border-box;
+    border-radius: 8px;
+}
+.replacement-card {
+    padding: 8px;
+    border: 1px solid #d7e7d1;
+    background: #fff;
+    box-shadow: 0 3px 10px rgba(51, 91, 46, 0.1);
+    cursor: pointer;
+}
+.replacement-card:hover {
+    border-color: #78ad68;
+    box-shadow: 0 6px 14px rgba(51, 91, 46, 0.18);
+}
+.replacement-card img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 5 / 7;
+    object-fit: cover;
+    border-radius: 6px;
+    background: #f5faf2;
+}
+.replacement-card-name {
+    overflow: hidden;
+    margin-top: 14px;
+    padding-bottom: 3px;
+    color: #263d25;
+    font-size: 14px;
+    font-weight: bold;
+    line-height: 1.3;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.replacement-card-delete,
+.replacement-group-delete {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: #dc5b54;
+    color: #fff;
+    cursor: pointer;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+}
+.replacement-card:hover > .replacement-card-delete,
+.deck-replacement-group:hover > .replacement-group-delete {
+    opacity: 1;
+    pointer-events: auto;
+}
+.replacement-card:hover > .replacement-view-btn {
+    display: flex;
+}
+.replacement-card-delete {
+    position: absolute;
+    top: -7px;
+    right: -7px;
+    width: 22px;
+    height: 22px;
+    font-size: 16px;
+}
+.replacement-group-delete {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 26px;
+    height: 26px;
+    font-size: 18px;
+}
+.replacement-add-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 2px dashed #9bc28b;
+    background: rgba(255, 255, 255, 0.45);
+    color: #547d4c;
+    cursor: pointer;
+}
+.replacement-add-card:hover {
+    border-color: #5f9952;
+    background: #fff;
+}
+.replacement-add-card span {
+    font-size: 28px;
+}
+.deck-replacement-empty {
+    padding: 28px;
+    border: 1px dashed #b9dca9;
+    border-radius: 8px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.45);
+}
+
+@media (max-width: 900px) {
+    .deck-replacement-group {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+    .deck-replacement-arrow {
+        align-self: center;
+    }
+}

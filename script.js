@@ -32,9 +32,14 @@ let editingReplacementContext = null;
 let activeMetaDeckId = null; 
 let activeDeckTabId = null;
 let deckTabClickTimer = null;
-let activeMetaLobbyTabId = "b3";
+let activeMetaLobbyTabId = null;
 let draggedMetaLobbyTabId = null;
 let metaLobbyTabClickTimer = null;
+let draggedGeneralTagName = null;
+const AUTO_TEAM_LOBBY_TAB_ID = "auto-team";
+const DEFAULT_24H_VERSION_TAB_ID = "b4";
+let active24hVersionTabId = DEFAULT_24H_VERSION_TAB_ID;
+let challenge24hTabClickTimer = null;
 
 // --- 常數定義 ---
 const raritiesAlt = [
@@ -69,21 +74,46 @@ const raritiesNeededGold = [
 
 const raritiesTwoStar = [
     { name: "2星", icon: "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show" },
-    { name: "2彩星", icon: "https://img.game8.co/4137130/6eb953da81d509f5f6fde8f63ded90f6.png/show" }
+    { name: "2彩星", icon: "https://img.game8.co/4137130/6eb953da81d509f5f6fde8f63ded90f6.png/show" },
+    { name: "3星", icon: "https://img.game8.co/3995619/a0d611ce374e3070c530ee8d3fd81efa.png/show" },
+    { name: "皇冠", icon: "https://img.game8.co/3997607/303598e292a532bcde37ab527a0ac263.png/show" }
 ];
+const highRarityNames = new Set(raritiesTwoStar.map(rarity => rarity.name));
 
 const typesGeneral = [
     { name: "支援者" },
     { name: "物品" },
     { name: "道具" },
+    { name: "競技場" },
     { name: "寶可夢" }
 ];
+
+const generalTagColors = [
+    { name: "預設", value: "#6c5ce7", bg: "#ece7ff" },
+    { name: "灰色", value: "#787774", bg: "#eeeeec" },
+    { name: "棕色", value: "#9f6b53", bg: "#f4e6dc" },
+    { name: "橘色", value: "#d9730d", bg: "#fae3d0" },
+    { name: "黃色", value: "#cb912f", bg: "#fdecc8" },
+    { name: "綠色", value: "#448361", bg: "#dbeddb" },
+    { name: "藍色", value: "#337ea9", bg: "#d3e5ef" },
+    { name: "紫色", value: "#9065b0", bg: "#e8deee" },
+    { name: "粉色", value: "#c14c8a", bg: "#f5e0e9" },
+    { name: "紅色", value: "#d44c47", bg: "#ffe2dd" }
+];
+const GENERAL_TAG_ORDER_STORAGE_KEY = "ptcg-general-tag-order";
 
 const tierWeights = { "SS": 8, "S": 7, "A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "無": 1 };
 const deckRowTypes = [
     { key: "寶可夢", label: "寶可夢", aliases: ["寶可夢"] },
     { key: "支援者", label: "支援者", aliases: ["支援者"] },
     { key: "物品、道具、競技場", label: "物品、道具、競技場", aliases: ["物品、道具、競技場", "物品與道具"] }
+];
+const defaultNewDeckCards = [
+    { name: "博士的研究", type: "支援者", qty: 2 },
+    { name: "娜姿", type: "支援者", qty: 1 },
+    { name: "赤日", type: "支援者", qty: 1 },
+    { name: "模仿少女", type: "支援者", qty: 1 },
+    { name: "精靈球", type: "物品、道具、競技場", qty: 2 }
 ];
 const deckAttributeMeta = {
     "草": { icon: "https://img.game8.co/4018726/c2d96eaebb6cd06d6a53dfd48da5341c.png/show", className: "attr-grass" },
@@ -95,8 +125,8 @@ const deckAttributeMeta = {
     "鬥": { icon: "https://img.game8.co/4018724/e22e7f39587352fc048b3821da0ceea4.png/show", className: "attr-fighting" },
     "惡": { icon: "https://img.game8.co/4018722/3488b79c0d788fbcb381c92ce97b750d.png/show", className: "attr-dark" },
     "鋼": { icon: "https://img.game8.co/4018728/fdfe7a7dc4753da40de9c04aa96ccc25.png/show", className: "attr-metal" },
-    "無": { icon: "https://img.game8.co/4018721/a654c44596214b3bf38769c180602a16.png/show", className: "attr-colorless" },
-    "龍": { icon: "https://img.game8.co/4018723/65faf7d97c4fc59e1bf4bb67bc37af16.png/show", className: "attr-dragon" }
+    "龍": { icon: "https://img.game8.co/4018723/65faf7d97c4fc59e1bf4bb67bc37af16.png/show", className: "attr-dragon" },
+    "無": { icon: "https://img.game8.co/4018721/a654c44596214b3bf38769c180602a16.png/show", className: "attr-colorless" }
 };
 
 function renderDeckAttributeIcon(icon, attrName) {
@@ -117,22 +147,85 @@ function normalizeCardName(name = "") {
 }
 
 function normalizeCardImageUrl(imageUrl = "") {
-    const trimmedUrl = imageUrl.trim();
-    if (!trimmedUrl) return "";
+    const cleanedUrl = imageUrl
+        .normalize("NFKC")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/&amp;/g, "&")
+        .trim();
+    if (!cleanedUrl) return "";
+
+    const decodeLoose = (value) => {
+        let decoded = value;
+        for (let i = 0; i < 2; i += 1) {
+            try {
+                const next = decodeURIComponent(decoded);
+                if (next === decoded) break;
+                decoded = next;
+            } catch {
+                break;
+            }
+        }
+        return decoded;
+    };
+
+    const normalizePath = (path) => decodeLoose(path)
+        .replace(/\\/g, "/")
+        .replace(/\/show$/i, "")
+        .replace(/\/+$/g, "")
+        .toLocaleLowerCase();
+
+    const buildIdentity = (host, path, searchParams = null) => {
+        const normalizedPath = normalizePath(path);
+        if (!normalizedPath) return "";
+        if (normalizedPath.includes("/images/game/card/")) {
+            return `ptcgp-card:${normalizedPath}`;
+        }
+
+        const ignoredParams = new Set([
+            "w", "width", "h", "height", "q", "quality", "format", "fit", "crop", "auto", "dpr"
+        ]);
+        const keptParams = [];
+        searchParams?.forEach((value, key) => {
+            const normalizedKey = key.toLocaleLowerCase();
+            if (ignoredParams.has(normalizedKey)) return;
+            keptParams.push(`${normalizedKey}=${decodeLoose(value).trim().toLocaleLowerCase()}`);
+        });
+        keptParams.sort();
+
+        return `${host.toLocaleLowerCase()}${normalizedPath}${keptParams.length ? `?${keptParams.join("&")}` : ""}`;
+    };
 
     try {
-        const url = new URL(trimmedUrl);
-        url.hash = "";
-        url.search = "";
-        url.hostname = url.hostname.toLowerCase();
-        url.pathname = decodeURIComponent(url.pathname).replace(/\/+$/, "");
-        return `${url.hostname}${url.pathname}`.toLocaleLowerCase();
+        const url = new URL(cleanedUrl, "https://local.invalid");
+        const proxiedImageUrl = url.searchParams.get("url")
+            || url.searchParams.get("src")
+            || url.searchParams.get("image");
+        if (proxiedImageUrl) return normalizeCardImageUrl(proxiedImageUrl);
+        return buildIdentity(url.hostname, url.pathname, url.searchParams);
     } catch {
-        return trimmedUrl
-            .replace(/[?#].*$/, "")
-            .replace(/\/+$/, "")
-            .toLocaleLowerCase();
+        const withoutHash = cleanedUrl.split("#")[0];
+        const [pathOnly] = withoutHash.split("?");
+        return normalizePath(pathOnly);
     }
+}
+
+function normalizeCardId(id = "") {
+    return id
+        .normalize("NFKC")
+        .replace(/[\u200B-\u200D\uFEFF]/g, "")
+        .replace(/\s+/g, "")
+        .trim()
+        .toLocaleLowerCase();
+}
+
+function isSameAutocompleteCard(existing, normalizedImageUrl, normalizedId) {
+    const hasSameId = Boolean(normalizedId)
+        && Boolean(existing.normalizedId)
+        && existing.normalizedId === normalizedId;
+    const hasSameImage = Boolean(normalizedImageUrl)
+        && Boolean(existing.normalizedImageUrl)
+        && existing.normalizedImageUrl === normalizedImageUrl;
+    return hasSameId || hasSameImage;
 }
 
 function addUniqueCardToDict(card = {}) {
@@ -143,6 +236,7 @@ function addUniqueCardToDict(card = {}) {
     const imageUrl = (card.imageUrl || card.img || "").trim();
     const normalizedImageUrl = normalizeCardImageUrl(imageUrl);
     const id = (card.id || "").trim();
+    const normalizedId = normalizeCardId(id);
     const rarity = card.rarity || "1星";
     const bgColor = card.bgColor || "#ffffff";
 
@@ -150,15 +244,20 @@ function addUniqueCardToDict(card = {}) {
         uniqueCardsDict[normalizedName] = [];
     }
 
-    const existing = uniqueCardsDict[normalizedName].find(item => item.normalizedImageUrl === normalizedImageUrl);
+    const existing = uniqueCardsDict[normalizedName].find(item =>
+        isSameAutocompleteCard(item, normalizedImageUrl, normalizedId)
+    );
     if (!existing) {
-        uniqueCardsDict[normalizedName].push({ name, id, imageUrl, normalizedImageUrl, rarity, bgColor });
+        uniqueCardsDict[normalizedName].push({ name, id, normalizedId, imageUrl, normalizedImageUrl, rarity, bgColor });
         return;
     }
 
     if (!existing.name && name) existing.name = name;
     if (!existing.imageUrl && imageUrl) existing.imageUrl = imageUrl;
-    if (!existing.id && id) existing.id = id;
+    if (!existing.id && id) {
+        existing.id = id;
+        existing.normalizedId = normalizedId;
+    }
     if (!existing.rarity && rarity) existing.rarity = rarity;
     if ((!existing.bgColor || existing.bgColor === "#ffffff") && bgColor) {
         existing.bgColor = bgColor;
@@ -176,12 +275,365 @@ function getCardQuantity(card) {
     return card.neededCardsData?.quantity || card.twoStarData?.quantity || card.altAccData?.quantity || 1;
 }
 
+function getChallenge24hVersionTabs() {
+    const config = cardsData.find(card => card.section === "challenge_24h_version_config");
+    const tabs = config?.versionTabs;
+    return Array.isArray(tabs) && tabs.length > 0
+        ? tabs
+        : [{ id: DEFAULT_24H_VERSION_TAB_ID, name: "B4" }];
+}
+
+function getChallenge24hCardVersionTabId(card) {
+    return card.challenge24hData?.versionTabId || DEFAULT_24H_VERSION_TAB_ID;
+}
+
+function getChallenge24hVersionTabName(tabId = active24hVersionTabId) {
+    return getChallenge24hVersionTabs().find(tab => tab.id === tabId)?.name || "B4";
+}
+
+async function saveChallenge24hVersionTabs(tabs) {
+    const normalizedTabs = tabs.length > 0 ? tabs : [{ id: DEFAULT_24H_VERSION_TAB_ID, name: "B4" }];
+    const config = cardsData.find(card => card.section === "challenge_24h_version_config");
+    if (config) {
+        await updateDoc(doc(db, "ptcg_cards", config.docId), { versionTabs: normalizedTabs });
+    } else {
+        await addDoc(cardsCollection, { section: "challenge_24h_version_config", versionTabs: normalizedTabs });
+    }
+}
+
+function normalizeTagName(name = "") {
+    return name.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase();
+}
+
+function isValidHexColor(color = "") {
+    return /^#[0-9a-f]{6}$/i.test(color);
+}
+
+function escapeHtml(value = "") {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function getGeneralTagLibrary(typeName = getSelectedGeneralTagType()) {
+    const tagMap = new Map();
+    const normalizedType = normalizeTagName(typeName);
+    cardsData.forEach(card => {
+        if (card.section !== "general_cards") return;
+        if (normalizeTagName(card.generalData?.type || "") !== normalizedType) return;
+        const tagName = (card.generalData?.tagName || "").trim();
+        if (!tagName) return;
+        const key = normalizeTagName(tagName);
+        if (!key || tagMap.has(key)) return;
+        const tagColor = isValidHexColor(card.generalData?.tagColor) ? card.generalData.tagColor : "#787774";
+        tagMap.set(key, { name: tagName, color: tagColor });
+    });
+    return tagMap;
+}
+
+function getGeneralTagColorMeta(color) {
+    return generalTagColors.find(item => item.value.toLocaleLowerCase() === color?.toLocaleLowerCase())
+        || generalTagColors.find(item => item.name === "灰色")
+        || generalTagColors[0];
+}
+
+function getSelectedGeneralTagType() {
+    return document.getElementById("card-general-type")?.value || "支援者";
+}
+
+function getGeneralTagOrderStorageKey(typeName = getSelectedGeneralTagType()) {
+    return `${GENERAL_TAG_ORDER_STORAGE_KEY}:${normalizeTagName(typeName)}`;
+}
+
+function getGeneralTagOrder(typeName = getSelectedGeneralTagType()) {
+    try {
+        const savedOrder = JSON.parse(localStorage.getItem(getGeneralTagOrderStorageKey(typeName)) || "[]");
+        return Array.isArray(savedOrder) ? savedOrder : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveGeneralTagOrder(tagNames, typeName = getSelectedGeneralTagType()) {
+    localStorage.setItem(getGeneralTagOrderStorageKey(typeName), JSON.stringify(tagNames.map(normalizeTagName).filter(Boolean)));
+}
+
+function sortGeneralTags(tags, typeName = getSelectedGeneralTagType()) {
+    const order = getGeneralTagOrder(typeName);
+    const orderMap = new Map(order.map((name, index) => [name, index]));
+    return [...tags].sort((a, b) => {
+        const indexA = orderMap.has(normalizeTagName(a.name)) ? orderMap.get(normalizeTagName(a.name)) : Number.MAX_SAFE_INTEGER;
+        const indexB = orderMap.has(normalizeTagName(b.name)) ? orderMap.get(normalizeTagName(b.name)) : Number.MAX_SAFE_INTEGER;
+        if (indexA !== indexB) return indexA - indexB;
+        return a.name.localeCompare(b.name);
+    });
+}
+
+function showGeneralTagOptions() {
+    renderGeneralTagList();
+    generalTagList.classList.add("show");
+}
+
+function hideGeneralTagOptions() {
+    generalTagList.classList.remove("show");
+    hideGeneralTagColorPopover();
+}
+
+function hideGeneralTagColorPopover() {
+    generalTagColorPopover.classList.remove("show");
+    generalTagColorPopover.innerHTML = "";
+}
+
+function openGeneralTagColorPopover(anchorEl, targetTagName = generalTagNameInput.value) {
+    const selectedColor = generalTagColorInput.value || getGeneralTagColorMeta().value;
+    const selectedType = getSelectedGeneralTagType();
+    generalTagColorPopover.innerHTML = `<div class="general-tag-color-title">顏色</div>`;
+    generalTagColors.forEach(color => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "general-tag-color-option";
+        button.classList.toggle("selected", color.value.toLocaleLowerCase() === selectedColor.toLocaleLowerCase());
+        button.innerHTML = `
+            <span class="general-tag-color-swatch" style="background:${color.bg}; border-color:${color.value};"></span>
+            <span>${color.name}</span>
+            <span class="general-tag-color-check">✓</span>
+        `;
+        button.addEventListener("click", (event) => {
+            event.stopPropagation();
+            generalTagNameInput.value = targetTagName;
+            generalTagColorInput.value = color.value;
+            renderGeneralTagList();
+            generalTagList.classList.add("show");
+            hideGeneralTagColorPopover();
+        });
+        generalTagColorPopover.appendChild(button);
+    });
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "general-tag-delete-option";
+    deleteButton.innerHTML = `<span>刪除標籤</span>`;
+    deleteButton.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        await deleteGeneralTag(targetTagName, selectedType);
+    });
+    generalTagColorPopover.appendChild(deleteButton);
+
+    generalTagColorPopover.classList.add("show");
+
+    const rect = anchorEl.getBoundingClientRect();
+    const popoverRect = generalTagColorPopover.getBoundingClientRect();
+    const margin = 12;
+    const left = Math.max(margin, Math.min(rect.right + 8, window.innerWidth - popoverRect.width - margin));
+    const preferredTop = rect.bottom - popoverRect.height + 8;
+    const top = Math.max(margin, Math.min(preferredTop, window.innerHeight - popoverRect.height - margin));
+    generalTagColorPopover.style.left = `${left}px`;
+    generalTagColorPopover.style.top = `${top}px`;
+}
+
+function renderGeneralTagList(openColorTagName = null) {
+    const selectedType = getSelectedGeneralTagType();
+    const tags = sortGeneralTags(Array.from(getGeneralTagLibrary(selectedType).values()), selectedType);
+    generalTagList.innerHTML = "";
+    if (tags.length === 0) {
+        generalTagList.innerHTML = `<div class="general-tag-empty">尚未建立標籤，輸入名稱即可建立</div>`;
+        return;
+    }
+
+    tags.forEach(tag => {
+        const colorMeta = getGeneralTagColorMeta(tag.color);
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "general-tag-option";
+        button.draggable = true;
+        button.dataset.tagName = tag.name;
+        button.style.setProperty("--tag-color", colorMeta.value);
+        button.style.setProperty("--tag-bg", colorMeta.bg);
+        button.innerHTML = `
+            <span class="general-tag-drag" title="拖曳排序">⋮⋮</span>
+            <span class="general-tag-pill">${escapeHtml(tag.name)}</span>
+            <span class="general-tag-spacer"></span>
+            <span class="general-tag-more">•••</span>
+        `;
+        button.addEventListener("click", () => {
+            generalTagNameInput.value = tag.name;
+            generalTagColorInput.value = colorMeta.value;
+        });
+        button.querySelector(".general-tag-more").addEventListener("click", (event) => {
+            event.stopPropagation();
+            generalTagNameInput.value = tag.name;
+            generalTagColorInput.value = colorMeta.value;
+            openGeneralTagColorPopover(event.currentTarget, tag.name);
+        });
+        button.addEventListener("dragstart", (event) => {
+            draggedGeneralTagName = tag.name;
+            event.dataTransfer.effectAllowed = "move";
+            setTimeout(() => button.classList.add("dragging"), 0);
+        });
+        button.addEventListener("dragend", () => {
+            draggedGeneralTagName = null;
+            button.classList.remove("dragging");
+        });
+        button.addEventListener("dragover", (event) => {
+            if (!draggedGeneralTagName || draggedGeneralTagName === tag.name) return;
+            event.preventDefault();
+            button.classList.add("drag-over");
+        });
+        button.addEventListener("dragleave", () => button.classList.remove("drag-over"));
+        button.addEventListener("drop", (event) => {
+            event.preventDefault();
+            button.classList.remove("drag-over");
+            if (!draggedGeneralTagName || draggedGeneralTagName === tag.name) return;
+            const nextOrder = sortGeneralTags(Array.from(getGeneralTagLibrary(selectedType).values()), selectedType).map(item => item.name);
+            const fromIndex = nextOrder.findIndex(name => normalizeTagName(name) === normalizeTagName(draggedGeneralTagName));
+            const toIndex = nextOrder.findIndex(name => normalizeTagName(name) === normalizeTagName(tag.name));
+            if (fromIndex === -1 || toIndex === -1) return;
+            const [movedTag] = nextOrder.splice(fromIndex, 1);
+            nextOrder.splice(toIndex, 0, movedTag);
+            saveGeneralTagOrder(nextOrder, selectedType);
+            renderGeneralTagList(openColorTagName);
+            generalTagList.classList.add("show");
+        });
+        generalTagList.appendChild(button);
+
+    });
+}
+
+function syncGeneralTagColorFromName() {
+    const tag = getGeneralTagLibrary().get(normalizeTagName(generalTagNameInput.value));
+    if (tag) {
+        generalTagColorInput.value = getGeneralTagColorMeta(tag.color).value;
+    }
+}
+
+function renderGeneralCardTag(card) {
+    const tagName = (card.generalData?.tagName || "").trim();
+    if (!tagName) return "";
+    const colorMeta = getGeneralTagColorMeta(card.generalData?.tagColor);
+    return `<div class="general-card-tag-line"><div class="general-card-tag" style="--tag-color:${colorMeta.value}; --tag-bg:${colorMeta.bg};">${escapeHtml(tagName)}</div></div>`;
+}
+
+async function syncSharedGeneralTagColor(tagName, tagColor, typeName, skipDocId = null) {
+    if (!tagName || !isValidHexColor(tagColor)) return;
+    const normalizedTagName = normalizeTagName(tagName);
+    const normalizedTypeName = normalizeTagName(typeName);
+    const cardsToUpdate = cardsData.filter(card =>
+        card.section === "general_cards"
+        && card.docId !== skipDocId
+        && normalizeTagName(card.generalData?.type || "") === normalizedTypeName
+        && normalizeTagName(card.generalData?.tagName || "") === normalizedTagName
+        && card.generalData?.tagColor !== tagColor
+    );
+
+    for (let i = 0; i < cardsToUpdate.length; i += 450) {
+        const batch = writeBatch(db);
+        cardsToUpdate.slice(i, i + 450).forEach(card => {
+            batch.update(doc(db, "ptcg_cards", card.docId), { "generalData.tagColor": tagColor });
+        });
+        await batch.commit();
+    }
+}
+
+async function deleteGeneralTag(tagName, typeName) {
+    if (!tagName) return;
+    const confirmed = confirm(`確定要刪除「${tagName}」標籤嗎？\n\n這會清空「${typeName}」區塊中所有使用此標籤的卡片。`);
+    if (!confirmed) return;
+
+    const normalizedTagName = normalizeTagName(tagName);
+    const normalizedTypeName = normalizeTagName(typeName);
+    const cardsToUpdate = cardsData.filter(card =>
+        card.section === "general_cards"
+        && normalizeTagName(card.generalData?.type || "") === normalizedTypeName
+        && normalizeTagName(card.generalData?.tagName || "") === normalizedTagName
+    );
+
+    for (let i = 0; i < cardsToUpdate.length; i += 450) {
+        const batch = writeBatch(db);
+        cardsToUpdate.slice(i, i + 450).forEach(card => {
+            batch.update(doc(db, "ptcg_cards", card.docId), {
+                "generalData.tagName": "",
+                "generalData.tagColor": ""
+            });
+        });
+        await batch.commit();
+    }
+
+    const nextOrder = sortGeneralTags(Array.from(getGeneralTagLibrary(typeName).values()), typeName)
+        .map(item => item.name)
+        .filter(name => normalizeTagName(name) !== normalizedTagName);
+    saveGeneralTagOrder(nextOrder, typeName);
+
+    if (normalizeTagName(generalTagNameInput.value) === normalizedTagName) {
+        generalTagNameInput.value = "";
+        generalTagColorInput.value = "#787774";
+    }
+    hideGeneralTagColorPopover();
+    renderGeneralTagList();
+    generalTagList.classList.add("show");
+}
+
 function getCardsQuantityTotal(cards = []) {
     return cards.reduce((sum, card) => sum + getCardQuantity(card), 0);
 }
 
+function isSameCardIdentity(a = {}, b = {}) {
+    const idA = normalizeCardId(a.id || "");
+    const idB = normalizeCardId(b.id || "");
+    if (idA && idB) return idA === idB;
+
+    const nameA = normalizeCardName(a.name || "");
+    const nameB = normalizeCardName(b.name || "");
+    const imageA = normalizeCardImageUrl(a.imageUrl || a.img || "");
+    const imageB = normalizeCardImageUrl(b.imageUrl || b.img || "");
+    return Boolean(nameA && nameB && imageA && imageB && nameA === nameB && imageA === imageB);
+}
+
+function findMatchingAltAccHighRarityCard(cardObj, accountType, excludeDocId = null) {
+    return cardsData.find(card =>
+        card.docId !== excludeDocId
+        && card.section === "alt_acc"
+        && highRarityNames.has(card.rarity)
+        && card.altAccData?.accountType === accountType
+        && isSameCardIdentity(card, cardObj)
+    );
+}
+
+function buildAltAccPayloadFromHighRarity(cardObj, twoStarData, existingAltCard = null) {
+    const accountType = twoStarData.status;
+    const quantity = twoStarData.quantity || getCardQuantity(existingAltCard || {}) || 1;
+    return {
+        ...cardObj,
+        section: "alt_acc",
+        altAccData: {
+            ...(existingAltCard?.altAccData || {}),
+            accountType,
+            hasOnMain: existingAltCard?.altAccData?.hasOnMain || "false",
+            quantity
+        },
+        twoStarData: {
+            ...(existingAltCard?.twoStarData || {}),
+            ...twoStarData,
+            tab: "擁有的卡",
+            status: accountType,
+            quantity,
+            order: existingAltCard?.twoStarData?.order || twoStarData.order || Date.now()
+        }
+    };
+}
+
+function shouldSyncHighRarityToAltAcc(saveSection, rarityInput) {
+    if (saveSection !== "two_star_cards") return false;
+    if (!highRarityNames.has(rarityInput)) return false;
+    if (document.getElementById("card-two-star-tab").value !== "擁有的卡") return false;
+    return ["小帳", "資源帳"].includes(document.getElementById("card-two-star-status").value);
+}
+
 function isTwoStarCardInRow(card, filterVal) {
     if (currentTwoStarTab !== "擁有的卡") {
+        if (filterVal === null) return true;
         return card.twoStarData?.type === filterVal;
     }
 
@@ -206,7 +658,7 @@ async function updateCardQuantity(card, fieldPath, newQty) {
         delete payload["altAccData.quantity"];
     }
 
-    if (card.section === "alt_acc" && (card.rarity === "2星" || card.rarity === "2彩星")) {
+    if (card.section === "alt_acc" && highRarityNames.has(card.rarity)) {
         payload["twoStarData.quantity"] = quantity;
     }
 
@@ -242,20 +694,56 @@ function getDeckCardType(cardType) {
 function getMetaLobbyTabs() {
     const config = cardsData.find(card => card.section === "meta_deck_lobby_config");
     const tabs = config?.lobbyTabs;
-    if (Array.isArray(tabs) && tabs.length > 0) return tabs;
-    return [{ id: "b3", name: "B3" }];
+    const savedNormalTabs = Array.isArray(tabs) && tabs.length > 0
+        ? tabs.filter(tab => tab.id !== AUTO_TEAM_LOBBY_TAB_ID)
+        : [];
+    const normalTabs = savedNormalTabs.length > 0 ? savedNormalTabs : [{ id: "b3", name: "B3" }];
+    return [{ id: AUTO_TEAM_LOBBY_TAB_ID, name: "自動隊伍", fixed: true }, ...normalTabs];
+}
+
+function getLatestMetaLobbyTabId(tabs = getMetaLobbyTabs()) {
+    const normalTabs = tabs.filter(tab => tab.id !== AUTO_TEAM_LOBBY_TAB_ID);
+    return normalTabs.at(-1)?.id || tabs[0]?.id || "b3";
+}
+
+function getDefaultMetaLobbyTabId(tabs = getMetaLobbyTabs()) {
+    const normalTabs = tabs.filter(tab => tab.id !== AUTO_TEAM_LOBBY_TAB_ID);
+    return normalTabs[0]?.id || "b3";
+}
+
+function getMetaLobbyTabName(tabId = activeMetaLobbyTabId) {
+    return getMetaLobbyTabs().find(tab => tab.id === tabId)?.name || "";
+}
+
+function populateDeckVersionSelect(selectedTabId = activeMetaLobbyTabId) {
+    const select = document.getElementById("deck-version");
+    if (!select) return;
+    const tabs = getMetaLobbyTabs();
+    const fallbackTabId = tabs.some(tab => tab.id === selectedTabId) ? selectedTabId : getDefaultMetaLobbyTabId(tabs);
+    select.innerHTML = tabs
+        .map(tab => `<option value="${tab.id}" ${tab.id === fallbackTabId ? "selected" : ""}>${tab.name}</option>`)
+        .join("");
+}
+
+function updateDeckTierFieldVisibility(selectedTabId = document.getElementById("deck-version")?.value) {
+    const tierGroup = document.getElementById("deck-tier")?.closest(".input-group");
+    if (tierGroup) tierGroup.style.display = selectedTabId === AUTO_TEAM_LOBBY_TAB_ID ? "none" : "flex";
 }
 
 function getDeckLobbyTabId(deck) {
-    return deck.deckData?.lobbyTabId || "b3";
+    return deck.deckData?.lobbyTabId || getDefaultMetaLobbyTabId();
 }
 
 async function saveMetaLobbyTabs(tabs) {
+    const normalizedTabs = [
+        { id: AUTO_TEAM_LOBBY_TAB_ID, name: "自動隊伍", fixed: true },
+        ...tabs.filter(tab => tab.id !== AUTO_TEAM_LOBBY_TAB_ID)
+    ];
     const config = cardsData.find(card => card.section === "meta_deck_lobby_config");
     if (config) {
-        await updateDoc(doc(db, "ptcg_cards", config.docId), { lobbyTabs: tabs });
+        await updateDoc(doc(db, "ptcg_cards", config.docId), { lobbyTabs: normalizedTabs });
     } else {
-        await addDoc(cardsCollection, { section: "meta_deck_lobby_config", lobbyTabs: tabs });
+        await addDoc(cardsCollection, { section: "meta_deck_lobby_config", lobbyTabs: normalizedTabs });
     }
 }
 
@@ -268,13 +756,66 @@ function cloneDeckReplacements(replacements = []) {
         ...group,
         sources: getReplacementSources(group).map(card => ({ ...card })),
         alternatives: Array.isArray(group.alternatives)
-            ? group.alternatives.map(card => ({ ...card }))
+            ? group.alternatives.slice(0, 3).map(card => ({ ...card }))
             : []
     }));
 }
 
+function cloneDeckTabs(tabs = []) {
+    return tabs.map(tab => {
+        const clonedTab = {
+            ...tab,
+            cards: cloneDeckCards(tab.cards || []),
+            replacements: cloneDeckReplacements(tab.replacements || [])
+        };
+        if (tab.coverCard) clonedTab.coverCard = { ...tab.coverCard };
+        return clonedTab;
+    });
+}
+
+function cloneMetaDeckDataForCopy(deckData = {}, overrides = {}) {
+    const clonedTabs = Array.isArray(deckData.tabs) ? cloneDeckTabs(deckData.tabs) : undefined;
+    return {
+        ...deckData,
+        cards: cloneDeckCards(deckData.cards || []),
+        ...(clonedTabs ? { tabs: clonedTabs } : {}),
+        ...overrides
+    };
+}
+
+function findDeckDefaultCardInfo(name) {
+    const variants = uniqueCardsDict[normalizeCardName(name)] || [];
+    return variants.find(item => item.imageUrl) || variants[0] || null;
+}
+
+function buildDefaultNewDeckCards() {
+    return defaultNewDeckCards.map(card => {
+        const dictCard = findDeckDefaultCardInfo(card.name);
+        return {
+            name: dictCard?.name || card.name,
+            id: dictCard?.id || "",
+            img: dictCard?.imageUrl || "",
+            type: card.type,
+            qty: card.qty,
+            bgColor: "#FFFFFF"
+        };
+    });
+}
+
+function buildDefaultNewDeckTabs(deckData) {
+    const defaultCards = buildDefaultNewDeckCards();
+    return [{
+        id: "default",
+        name: "預設牌組",
+        coverCard: { name: "", img: deckData.coverImg || "" },
+        coverImg: deckData.coverImg || "",
+        cards: cloneDeckCards(defaultCards),
+        replacements: []
+    }];
+}
+
 function getReplacementSources(group = {}) {
-    if (Array.isArray(group.sources) && group.sources.length > 0) return group.sources;
+    if (Array.isArray(group.sources) && group.sources.length > 0) return group.sources.slice(0, 3);
     if (group.source && (group.source.name || group.source.img)) return [group.source];
     return [];
 }
@@ -345,9 +886,72 @@ function openDeckCardModal(rowType, card = null, index = null) {
     document.getElementById("deck-card-name").value = card?.name || "";
     document.getElementById("deck-card-img").value = card?.img || "";
     document.getElementById("deck-card-type").value = getDeckCardType(card?.type || rowType);
-    document.getElementById("deck-card-qty").value = card?.qty || 2;
+    setDeckCardQuantity(card?.qty || 2);
+    setDeckCardBgColor(card?.bgColor || (card?.colorMode === "light-gray" ? "#f1f3f5" : "#ffffff"));
     deckCardFormModal.classList.add("show");
 }
+
+function setDeckCardBgColor(color = "#ffffff") {
+    if (!deckColorInput) return;
+    deckColorInput.value = color;
+    deckColorSwatches.forEach(s => s.classList.remove("selected"));
+    const matchSwatch = Array.from(deckColorSwatches).find(s =>
+        s.getAttribute("data-color").toUpperCase() === color.toUpperCase()
+    );
+    if (matchSwatch) matchSwatch.classList.add("selected");
+}
+
+function normalizeDeckCardBgColor(color = "") {
+    const value = String(color || "").trim().toLowerCase();
+    if (value === "#fff") return "#ffffff";
+    return value;
+}
+
+function getDeckCardBgColor(card = {}) {
+    return normalizeDeckCardBgColor(card.bgColor || (card.colorMode === "light-gray" ? "#f1f3f5" : "#ffffff"));
+}
+
+function isDeckCardWhiteBg(color) {
+    return getDeckCardBgColor({ bgColor: color }) === "#ffffff";
+}
+
+function isDeckCardLightGrayBg(color) {
+    return ["#d3d3d3", "#f1f3f5"].includes(getDeckCardBgColor({ bgColor: color }));
+}
+
+function setDeckCardQuantity(quantity) {
+    const selectedQty = Number(quantity) === 1 ? 1 : 2;
+    document.querySelectorAll(".deck-qty-option").forEach(button => {
+        const isActive = Number(button.dataset.qty) === selectedQty;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-checked", String(isActive));
+    });
+}
+
+function getDeckCardQuantity() {
+    return Number(document.querySelector(".deck-qty-option.active")?.dataset.qty) || 2;
+}
+
+document.querySelectorAll(".deck-qty-option").forEach(button => {
+    button.addEventListener("click", () => setDeckCardQuantity(button.dataset.qty));
+});
+
+function setDeckReplacementQuantity(quantity) {
+    const selectedQty = Number(quantity) === 2 ? 2 : 1;
+    document.querySelectorAll(".deck-replacement-qty-option").forEach(button => {
+        const isActive = Number(button.dataset.qty) === selectedQty;
+        button.classList.toggle("active", isActive);
+        button.setAttribute("aria-checked", String(isActive));
+    });
+}
+
+function getDeckReplacementQuantity() {
+    return Number(document.querySelector(".deck-replacement-qty-option.active")?.dataset.qty) || 1;
+}
+
+document.querySelectorAll(".deck-replacement-qty-option").forEach(button => {
+    button.addEventListener("click", () => setDeckReplacementQuantity(button.dataset.qty));
+});
 
 function openDeckCoverModal(deck, activeTab) {
     deckCoverForm.reset();
@@ -362,14 +966,17 @@ function openDeckReplacementModal(groupId, role, alternativeIndex = null, card =
     const deck = cardsData.find(c => c.docId === activeMetaDeckId);
     const activeTab = deck ? getActiveDeckTab(deck).activeTab : null;
     const group = activeTab?.replacements?.find(item => item.id === groupId);
-    const canAddSource = role === "source" && alternativeIndex !== null;
+    const canAddSource = role === "source"
+        && alternativeIndex !== null
+        && getReplacementSources(group).length < 3;
     document.getElementById("deck-replacement-modal-title").innerText =
         role === "source"
-            ? (alternativeIndex === null ? "新增基準卡" : "編輯基準卡")
-            : (alternativeIndex === null ? "新增替換卡" : "編輯替換卡");
+            ? (alternativeIndex === null ? "➕ 新增基準卡" : "✏️ 編輯基準卡")
+            : (alternativeIndex === null ? "➕ 新增替換卡" : "✏️ 編輯替換卡");
     document.getElementById("add-second-source-card").style.display = canAddSource ? "block" : "none";
     document.getElementById("deck-replacement-name").value = card?.name || "";
     document.getElementById("deck-replacement-img").value = card?.img || "";
+    setDeckReplacementQuantity(card?.qty || 1);
     deckReplacementFormModal.classList.add("show");
     document.getElementById("deck-replacement-name").focus();
 }
@@ -379,8 +986,10 @@ function openDeckModal(deck = null, tierName = "Tier 3") {
     editingDeckDocId = deck?.docId || null;
     document.getElementById("deck-modal-title").innerText = editingDeckDocId ? "✏️ 編輯 Meta 牌組" : "➕ 新增 Meta 牌組";
     document.getElementById("deck-name").value = deck?.deckData?.name || "";
+    populateDeckVersionSelect(deck ? getDeckLobbyTabId(deck) : activeMetaLobbyTabId);
     document.getElementById("deck-img").value = deck?.deckData?.coverImg || "";
     document.getElementById("deck-tier").value = deck?.deckData?.tier || tierName;
+    updateDeckTierFieldVisibility();
     document.getElementById("deck-attribute").value = deck?.deckData?.attribute || "草";
     deckFormModal.classList.add("show");
 }
@@ -395,8 +1004,20 @@ const rarityRowsContainerTwoStar = document.getElementById("rarity-rows-two-star
 const formModal = document.getElementById("form-modal");
 const cardForm = document.getElementById("card-form");
 const modalTitle = document.getElementById("modal-title");
-const colorSwatches = document.querySelectorAll(".color-swatch");
+const colorSwatches = document.querySelectorAll("#color-palette .color-swatch");
 const colorInput = document.getElementById("card-bgcolor");
+const deckColorSwatches = document.querySelectorAll("#deck-card-color-palette .deck-color-swatch");
+const deckColorInput = document.getElementById("deck-card-bgcolor");
+const generalTagNameInput = document.getElementById("card-general-tag-name");
+const generalTagColorInput = document.getElementById("card-general-tag-color");
+const generalTagList = document.getElementById("general-tag-list");
+let generalTagColorPopover = document.getElementById("general-tag-color-popover");
+if (!generalTagColorPopover) {
+    generalTagColorPopover = document.createElement("div");
+    generalTagColorPopover.id = "general-tag-color-popover";
+    generalTagColorPopover.className = "general-tag-color-popover";
+    document.body.appendChild(generalTagColorPopover);
+}
 
 const navAltAcc = document.getElementById("nav-alt-acc");
 const nav24h = document.getElementById("nav-24h-challenge");
@@ -419,9 +1040,16 @@ sidebarToggleBtn.addEventListener('click', () => sidebar.classList.toggle('colla
 
 // Meta 牌組 DOM
 const metaDecksListView = document.getElementById("meta-decks-list-view");
+const gridTier0 = document.getElementById("tier-0-grid");
 const gridTier1 = document.getElementById("tier-1-grid");
 const gridTier2 = document.getElementById("tier-2-grid");
 const gridTier3 = document.getElementById("tier-3-grid");
+const autoTeamGrid = document.getElementById("auto-team-grid");
+const autoTeamBlock = document.getElementById("auto-team-block");
+const tier0Block = document.getElementById("tier-0-block");
+const tier1Block = document.getElementById("tier-1-block");
+const tier2Block = document.getElementById("tier-2-block");
+const tier3Block = document.getElementById("tier-3-block");
 const metaDeckDetailView = document.getElementById("meta-deck-detail-view");
 const btnBackDecks = document.getElementById("btn-back-decks");
 const detailDeckTitle = document.getElementById("detail-deck-title");
@@ -429,6 +1057,9 @@ const detailDeckCover = document.getElementById("detail-deck-cover");
 const detailDeckRows = document.getElementById("detail-deck-rows");
 const deckFormModal = document.getElementById("deck-form-modal");
 const deckForm = document.getElementById("deck-form");
+document.getElementById("deck-version")?.addEventListener("change", (e) => {
+    updateDeckTierFieldVisibility(e.target.value);
+});
 const deckCardFormModal = document.getElementById("deck-card-form-modal");
 const deckCardForm = document.getElementById("deck-card-form");
 const deckCoverFormModal = document.getElementById("deck-cover-form-modal");
@@ -463,7 +1094,7 @@ navAltAcc.addEventListener("click", () => switchSection("alt_acc", "小帳資源
 nav24h.addEventListener("click", () => switchSection("24h", "24H得卡挑戰", nav24h, view24h));
 navNeeded.addEventListener("click", () => switchSection("needed_cards", "需要卡", navNeeded, viewNeeded));
 navGeneral.addEventListener("click", () => switchSection("general_cards", "泛用卡", navGeneral, viewGeneral));
-navTwoStar.addEventListener("click", () => switchSection("two_star_cards", "二星", navTwoStar, viewTwoStar));
+navTwoStar.addEventListener("click", () => switchSection("two_star_cards", "高罕卡", navTwoStar, viewTwoStar));
 navMetaDecks.addEventListener("click", () => switchSection("meta_decks", "Meta牌組", navMetaDecks, viewMetaDecks));
 
 function scrollMainToTop() {
@@ -485,6 +1116,41 @@ function renderAllViews() {
     }
 }
 
+function makeRarityBlockCollapsible(rowBlock) {
+    const header = Array.from(rowBlock.children).find(child => child.classList.contains("rarity-header"));
+    if (!header || rowBlock.classList.contains("toggle-row-block")) return;
+
+    const content = document.createElement("div");
+    content.className = "rarity-toggle-content";
+    while (header.nextSibling) {
+        content.appendChild(header.nextSibling);
+    }
+
+    const indicator = document.createElement("span");
+    indicator.className = "toggle-row-indicator";
+    indicator.textContent = "⌄";
+    header.appendChild(indicator);
+
+    rowBlock.appendChild(content);
+    rowBlock.classList.add("toggle-row-block");
+    header.classList.add("toggle-row-header");
+    header.setAttribute("role", "button");
+    header.setAttribute("tabindex", "0");
+    header.setAttribute("aria-expanded", "true");
+
+    const toggle = () => {
+        const isCollapsed = rowBlock.classList.toggle("collapsed");
+        header.setAttribute("aria-expanded", String(!isCollapsed));
+    };
+
+    header.addEventListener("click", toggle);
+    header.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        toggle();
+    });
+}
+
 async function handleSafeCopyCard(card) {
     const d = JSON.parse(JSON.stringify(card)); 
     delete d.docId; 
@@ -499,13 +1165,23 @@ async function handleSafeCopyCard(card) {
 // 🪄 渲染：Meta 牌組
 // ==========================================
 function renderMetaDecksList() {
+    gridTier0.innerHTML = "";
     gridTier1.innerHTML = "";
     gridTier2.innerHTML = "";
     gridTier3.innerHTML = "";
+    autoTeamGrid.innerHTML = "";
 
     const lobbyTabs = getMetaLobbyTabs();
-    if (!lobbyTabs.some(tab => tab.id === activeMetaLobbyTabId)) activeMetaLobbyTabId = lobbyTabs[0].id;
+    if (!activeMetaLobbyTabId || !lobbyTabs.some(tab => tab.id === activeMetaLobbyTabId)) {
+        activeMetaLobbyTabId = getLatestMetaLobbyTabId(lobbyTabs);
+    }
     renderMetaLobbyTabs(lobbyTabs);
+    const isAutoTeam = activeMetaLobbyTabId === AUTO_TEAM_LOBBY_TAB_ID;
+    autoTeamBlock.style.display = isAutoTeam ? "block" : "none";
+    tier0Block.style.display = "none";
+    tier1Block.style.display = isAutoTeam ? "none" : "block";
+    tier2Block.style.display = isAutoTeam ? "none" : "block";
+    tier3Block.style.display = isAutoTeam ? "none" : "block";
 
     const decks = cardsData.filter(c => c.section === "meta_deck" && getDeckLobbyTabId(c) === activeMetaLobbyTabId);
     decks.sort((a, b) => (a.deckData?.order || 0) - (b.deckData?.order || 0));
@@ -523,7 +1199,10 @@ function renderMetaDecksList() {
         box.classList.add(attrMeta.className);
 
         box.innerHTML = `
+            <button class="deck-version-btn" title="更換版本">⇄</button>
             <button class="del-deck-btn" title="刪除牌組">✕</button>
+            <button class="deck-tier-btn" title="更換 Tier">T</button>
+            <button class="copy-deck-btn" title="複製牌組">📄</button>
             <div class="deck-box-cover-wrap">
                 <img class="deck-box-cover" src="${deckImg}" onerror="this.src='https://placehold.co/300x420/eaeaea/999999?text=Error'">
             </div>
@@ -580,19 +1259,61 @@ function renderMetaDecksList() {
             }
         });
 
-        const tier = deck.deckData?.tier || "Tier 3";
-        if (tier === "Tier 1") gridTier1.appendChild(box);
-        else if (tier === "Tier 2") gridTier2.appendChild(box);
-        else gridTier3.appendChild(box);
+        box.querySelector('.copy-deck-btn').addEventListener("click", async (e) => {
+            e.stopPropagation();
+            await duplicateMetaDeck(deck);
+        });
+
+        box.querySelector('.deck-version-btn').addEventListener("click", (e) => {
+            e.stopPropagation();
+            openDeckQuickSelect(e.currentTarget, deck, "version");
+        });
+
+        box.querySelector('.deck-tier-btn').addEventListener("click", (e) => {
+            e.stopPropagation();
+            openDeckQuickSelect(e.currentTarget, deck, "tier");
+        });
+
+        if (isAutoTeam) {
+            autoTeamGrid.appendChild(box);
+        } else {
+            const tier = deck.deckData?.tier || "Tier 3";
+            if (tier === "Tier 0") gridTier0.appendChild(box);
+            else if (tier === "Tier 1") gridTier1.appendChild(box);
+            else if (tier === "Tier 2") gridTier2.appendChild(box);
+            else gridTier3.appendChild(box);
+        }
     });
 
+    if (isAutoTeam) {
+        const addBtn = document.createElement("div");
+        addBtn.className = "add-new-deck-box";
+        addBtn.innerHTML = `<span style="font-size: 32px; margin-bottom: 10px;">+</span><span>新增牌組</span>`;
+        addBtn.addEventListener("click", () => openDeckModal(null, "Tier 3"));
+        autoTeamGrid.appendChild(addBtn);
+        autoTeamGrid.ondragover = (e) => {
+            if (!draggedDeckDocId) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+        };
+        autoTeamGrid.ondrop = async (e) => {
+            if (!draggedDeckDocId || e.target.closest(".deck-box-container")) return;
+            e.preventDefault();
+            await reorderMetaDecks(null, "Tier 3");
+        };
+        return;
+    }
+
     const tiers = [
-        { grid: gridTier1, name: "Tier 1" },
-        { grid: gridTier2, name: "Tier 2" },
-        { grid: gridTier3, name: "Tier 3" }
+        { grid: gridTier0, block: tier0Block, name: "Tier 0" },
+        { grid: gridTier1, block: tier1Block, name: "Tier 1" },
+        { grid: gridTier2, block: tier2Block, name: "Tier 2" },
+        { grid: gridTier3, block: tier3Block, name: "Tier 3" }
     ];
 
     tiers.forEach(t => {
+        const deckCount = t.grid.querySelectorAll(".deck-box-container").length;
+        t.block.style.display = t.name === "Tier 0" && deckCount === 0 ? "none" : "block";
         const addBtn = document.createElement("div");
         addBtn.className = "add-new-deck-box";
         addBtn.innerHTML = `<span style="font-size: 32px; margin-bottom: 10px;">+</span><span>新增牌組</span>`;
@@ -620,11 +1341,12 @@ async function reorderMetaDecks(targetDeckId, targetTier) {
     const draggedDeck = cardsData.find(c => c.docId === draggedDeckDocId);
     if (!draggedDeck) return;
 
+    const isAutoTeam = activeMetaLobbyTabId === AUTO_TEAM_LOBBY_TAB_ID;
     const sortedTargetDecks = cardsData
         .filter(c => c.section === "meta_deck"
             && c.docId !== draggedDeckDocId
             && getDeckLobbyTabId(c) === activeMetaLobbyTabId
-            && (c.deckData?.tier || "Tier 3") === targetTier)
+            && (isAutoTeam || (c.deckData?.tier || "Tier 3") === targetTier))
         .sort((a, b) => (a.deckData?.order || 0) - (b.deckData?.order || 0));
 
     const insertIndex = targetDeckId ? sortedTargetDecks.findIndex(c => c.docId === targetDeckId) : sortedTargetDecks.length;
@@ -634,12 +1356,88 @@ async function reorderMetaDecks(targetDeckId, targetTier) {
     const now = Date.now();
     sortedTargetDecks.forEach((deck, idx) => {
         const deckRef = doc(db, "ptcg_cards", deck.docId);
-        batch.update(deckRef, {
-            "deckData.tier": targetTier,
-            "deckData.order": now + idx
-        });
+        const updates = { "deckData.order": now + idx };
+        if (!isAutoTeam) updates["deckData.tier"] = targetTier;
+        batch.update(deckRef, updates);
     });
     await batch.commit();
+}
+
+async function duplicateMetaDeck(deck) {
+    if (!deck?.deckData) return;
+    const copiedDeckData = cloneMetaDeckDataForCopy(deck.deckData, {
+        name: `${deck.deckData.name || "牌組"} 複製`,
+        order: Date.now(),
+        lobbyTabId: getDeckLobbyTabId(deck)
+    });
+    await addDoc(cardsCollection, {
+        section: "meta_deck",
+        deckData: copiedDeckData
+    });
+}
+
+function closeDeckQuickSelect() {
+    document.querySelector(".deck-quick-select-popover")?.remove();
+}
+
+function openDeckQuickSelect(anchorEl, deck, mode) {
+    closeDeckQuickSelect();
+    if (!deck?.docId) return;
+
+    const popover = document.createElement("div");
+    popover.className = "deck-quick-select-popover";
+    const label = document.createElement("div");
+    label.className = "deck-quick-select-label";
+    label.innerText = mode === "version" ? "更換版本" : "更換 Tier";
+
+    const select = document.createElement("select");
+    if (mode === "version") {
+        getMetaLobbyTabs().forEach(tab => {
+            const option = document.createElement("option");
+            option.value = tab.id;
+            option.innerText = tab.name;
+            select.appendChild(option);
+        });
+        select.value = getDeckLobbyTabId(deck);
+    } else {
+        ["Tier 0", "Tier 1", "Tier 2", "Tier 3"].forEach(tier => {
+            const option = document.createElement("option");
+            option.value = tier;
+            option.innerText = tier;
+            select.appendChild(option);
+        });
+        select.value = deck.deckData?.tier || "Tier 3";
+    }
+
+    select.addEventListener("click", e => e.stopPropagation());
+    select.addEventListener("change", async () => {
+        const updates = mode === "version"
+            ? {
+                "deckData.lobbyTabId": select.value,
+                "deckData.version": getMetaLobbyTabName(select.value)
+            }
+            : { "deckData.tier": select.value };
+        await updateDoc(doc(db, "ptcg_cards", deck.docId), updates);
+        closeDeckQuickSelect();
+    });
+
+    popover.addEventListener("click", e => e.stopPropagation());
+    popover.appendChild(label);
+    popover.appendChild(select);
+    document.body.appendChild(popover);
+
+    const rect = anchorEl.getBoundingClientRect();
+    const popoverRect = popover.getBoundingClientRect();
+    const margin = 10;
+    const left = Math.max(margin, Math.min(rect.left, window.innerWidth - popoverRect.width - margin));
+    const top = Math.max(margin, Math.min(rect.bottom + 8, window.innerHeight - popoverRect.height - margin));
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
+    select.focus();
+
+    setTimeout(() => {
+        document.addEventListener("click", closeDeckQuickSelect, { once: true });
+    }, 0);
 }
 
 btnBackDecks.addEventListener("click", () => {
@@ -688,8 +1486,9 @@ function renderMetaDeckDetail() {
 
         rowCards.forEach(({ card, index }) => {
             const cardEl = document.createElement("div");
-            cardEl.className = "card-box";
-            cardEl.style.backgroundColor = card.bgColor || "#ffffff";
+            const colorMode = card.colorMode || "transparent";
+            cardEl.className = `card-box deck-card-color-${colorMode}`;
+            cardEl.style.backgroundColor = getDeckCardBgColor(card);
             cardEl.setAttribute("draggable", true);
             
             const displayImg = card.img || "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
@@ -703,6 +1502,8 @@ function renderMetaDeckDetail() {
                     <strong>${displayName}</strong>
                 </div>
                 ${qtyBadge}
+                <button class="toggle-main-btn deck-gray-btn" title="改為淺灰底色">◼</button>
+                <button class="copy-card-btn" title="複製卡片">📄</button>
                 <button class="del-card-btn" title="從牌組移除">✕</button>
                 <button class="view-card-btn" title="放大預覽">🔍</button>
             `;
@@ -736,6 +1537,27 @@ function renderMetaDeckDetail() {
                 openDeckCardModal(rowType.key, card, index);
             });
 
+            cardEl.querySelector('.toggle-main-btn').addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const currentBgColor = getDeckCardBgColor(card);
+                if (!isDeckCardWhiteBg(currentBgColor) && !isDeckCardLightGrayBg(currentBgColor)) {
+                    openDeckCardModal(rowType.key, card, index);
+                    return;
+                }
+                const nextBgColor = isDeckCardLightGrayBg(currentBgColor) ? "#FFFFFF" : "#D3D3D3";
+                const updatedTabs = tabs.map(tab => tab.id === activeTab.id
+                    ? {
+                        ...tab,
+                        cards: tab.cards.map((item, cardIndex) => cardIndex === index
+                            ? { ...item, bgColor: nextBgColor, colorMode: "transparent" }
+                            : item
+                        )
+                    }
+                    : tab
+                );
+                await saveDeckTabs(deck, updatedTabs);
+            });
+
             cardEl.querySelector('.del-card-btn').addEventListener("click", async (e) => {
                 e.stopPropagation();
                 if (confirm(`確定要從牌組移除「${displayName}」嗎？`)) {
@@ -745,6 +1567,16 @@ function renderMetaDeckDetail() {
                     );
                     await saveDeckTabs(deck, updatedTabs);
                 }
+            });
+            cardEl.querySelector('.copy-card-btn').addEventListener("click", async (e) => {
+                e.stopPropagation();
+                const updatedTabs = tabs.map(tab => {
+                    if (tab.id !== activeTab.id) return tab;
+                    const copiedCards = [...tab.cards];
+                    copiedCards.splice(index + 1, 0, { ...card });
+                    return { ...tab, cards: copiedCards };
+                });
+                await saveDeckTabs(deck, updatedTabs);
             });
             cardEl.querySelector('.view-card-btn').addEventListener("click", (e) => {
                 e.stopPropagation();
@@ -786,9 +1618,11 @@ function createReplacementCardElement(card, onEdit, onDelete = null) {
     cardEl.className = "replacement-card";
     const displayImg = card?.img || "https://placehold.co/150x210/eaf5e5/729765?text=No+Image";
     const displayName = card?.name || "尚未設定";
+    const qtyBadge = `<div class="deck-card-qty-badge replacement-qty-badge">x${card?.qty || 1}</div>`;
     cardEl.innerHTML = `
         <img src="${displayImg}" alt="${displayName}" onerror="this.src='https://placehold.co/150x210/eaf5e5/729765?text=Error'">
         <div class="replacement-card-name">${displayName}</div>
+        ${qtyBadge}
         ${onDelete ? '<button type="button" class="replacement-card-delete" title="移除替換卡">&times;</button>' : ""}
         <button type="button" class="view-card-btn replacement-view-btn" title="放大預覽">🔍</button>
     `;
@@ -860,7 +1694,8 @@ function renderDeckReplacementSection(deck, tabs, activeTab) {
 
         const alternativesHost = document.createElement("div");
         alternativesHost.className = "deck-replacement-alternatives";
-        (group.alternatives || []).forEach((card, alternativeIndex) => {
+        const alternatives = (group.alternatives || []).slice(0, 3);
+        alternatives.forEach((card, alternativeIndex) => {
             alternativesHost.appendChild(createReplacementCardElement(
                 card,
                 () => openDeckReplacementModal(group.id, "alternative", alternativeIndex, card),
@@ -877,12 +1712,14 @@ function renderDeckReplacementSection(deck, tabs, activeTab) {
             ));
         });
 
-        const addAlternative = document.createElement("button");
-        addAlternative.type = "button";
-        addAlternative.className = "replacement-add-card";
-        addAlternative.innerHTML = `<span>＋</span><strong>新增替換卡</strong>`;
-        addAlternative.addEventListener("click", () => openDeckReplacementModal(group.id, "alternative"));
-        alternativesHost.appendChild(addAlternative);
+        if (alternatives.length < 3) {
+            const addAlternative = document.createElement("button");
+            addAlternative.type = "button";
+            addAlternative.className = "replacement-add-card";
+            addAlternative.innerHTML = `<span>＋</span><strong>新增替換卡</strong>`;
+            addAlternative.addEventListener("click", () => openDeckReplacementModal(group.id, "alternative"));
+            alternativesHost.appendChild(addAlternative);
+        }
 
         const deleteGroup = document.createElement("button");
         deleteGroup.type = "button";
@@ -1061,9 +1898,10 @@ function renderMetaLobbyTabs(tabs) {
     tabsHost.innerHTML = "";
 
     tabs.forEach(tab => {
+        const isFixedTab = tab.id === AUTO_TEAM_LOBBY_TAB_ID;
         const wrapper = document.createElement("div");
-        wrapper.className = "deck-tab-wrapper";
-        wrapper.setAttribute("draggable", true);
+        wrapper.className = `deck-tab-wrapper${isFixedTab ? " fixed-lobby-tab" : ""}`;
+        wrapper.setAttribute("draggable", String(!isFixedTab));
 
         const tabBtn = document.createElement("button");
         tabBtn.type = "button";
@@ -1076,13 +1914,19 @@ function renderMetaLobbyTabs(tabs) {
                 renderMetaDecksList();
             }, 180);
         });
-        tabBtn.addEventListener("dblclick", (e) => {
-            e.stopPropagation();
-            clearTimeout(metaLobbyTabClickTimer);
-            openLobbyTabActions(e.currentTarget, tab, tabs);
-        });
+        if (!isFixedTab) {
+            tabBtn.addEventListener("dblclick", (e) => {
+                e.stopPropagation();
+                clearTimeout(metaLobbyTabClickTimer);
+                openLobbyTabActions(e.currentTarget, tab, tabs);
+            });
+        }
 
         wrapper.addEventListener("dragstart", (e) => {
+            if (isFixedTab) {
+                e.preventDefault();
+                return;
+            }
             draggedMetaLobbyTabId = tab.id;
             e.dataTransfer.effectAllowed = "move";
             setTimeout(() => wrapper.classList.add("dragging"), 0);
@@ -1092,12 +1936,13 @@ function renderMetaLobbyTabs(tabs) {
             draggedMetaLobbyTabId = null;
         });
         wrapper.addEventListener("dragover", (e) => {
-            if (!draggedMetaLobbyTabId || draggedMetaLobbyTabId === tab.id) return;
+            if (isFixedTab || !draggedMetaLobbyTabId || draggedMetaLobbyTabId === tab.id) return;
             e.preventDefault();
             wrapper.classList.add("drag-over");
         });
         wrapper.addEventListener("dragleave", () => wrapper.classList.remove("drag-over"));
         wrapper.addEventListener("drop", async (e) => {
+            if (isFixedTab) return;
             e.preventDefault();
             wrapper.classList.remove("drag-over");
             const updatedTabs = [...tabs];
@@ -1122,7 +1967,134 @@ function renderMetaLobbyTabs(tabs) {
     tabsHost.appendChild(addBtn);
 }
 
+function renderChallenge24hTabs(tabs) {
+    const tabsHost = document.getElementById("challenge-24h-tabs");
+    if (!tabsHost) return;
+    tabsHost.innerHTML = "";
+
+    tabs.forEach(tab => {
+        const wrapper = document.createElement("div");
+        wrapper.className = "deck-tab-wrapper";
+
+        const tabBtn = document.createElement("button");
+        tabBtn.type = "button";
+        tabBtn.className = `deck-tab-btn ${tab.id === active24hVersionTabId ? "active" : ""}`;
+        tabBtn.innerHTML = `<span class="deck-tab-name">${tab.name}</span>`;
+        tabBtn.addEventListener("click", () => {
+            clearTimeout(challenge24hTabClickTimer);
+            challenge24hTabClickTimer = setTimeout(() => {
+                active24hVersionTabId = tab.id;
+                render24hRows();
+            }, 180);
+        });
+        tabBtn.addEventListener("dblclick", (e) => {
+            e.stopPropagation();
+            clearTimeout(challenge24hTabClickTimer);
+            openChallenge24hTabActions(e.currentTarget, tab, tabs);
+        });
+
+        wrapper.appendChild(tabBtn);
+        tabsHost.appendChild(wrapper);
+    });
+
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "deck-tab-add-btn";
+    addBtn.title = "新增版本";
+    addBtn.innerText = "+";
+    addBtn.addEventListener("click", () => createChallenge24hVersionTab(tabs));
+    tabsHost.appendChild(addBtn);
+}
+
+function openChallenge24hTabActions(tabBtn, tab, tabs) {
+    const wrapper = tabBtn.closest(".deck-tab-wrapper");
+    const actions = document.createElement("div");
+    actions.className = "meta-lobby-tab-actions";
+    actions.innerHTML = `
+        <button type="button" class="meta-lobby-action rename">更名</button>
+        <button type="button" class="meta-lobby-action delete">刪除</button>
+        <button type="button" class="meta-lobby-action cancel">取消</button>
+    `;
+
+    actions.querySelector(".rename").addEventListener("click", (e) => {
+        e.stopPropagation();
+        openInlineChallenge24hTabRename(actions, tab, tabs);
+    });
+    actions.querySelector(".delete").addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await deleteChallenge24hVersionTab(tab, tabs);
+    });
+    actions.querySelector(".cancel").addEventListener("click", (e) => {
+        e.stopPropagation();
+        render24hRows();
+    });
+
+    wrapper.replaceChild(actions, tabBtn);
+}
+
+function openInlineChallenge24hTabRename(targetEl, tab, tabs) {
+    const wrapper = targetEl.closest(".deck-tab-wrapper");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "deck-tab-rename-input";
+    input.value = tab.name;
+    let finished = false;
+
+    const finish = async (save) => {
+        if (finished) return;
+        finished = true;
+        const newName = input.value.trim();
+        if (save && newName && newName !== tab.name) {
+            await saveChallenge24hVersionTabs(tabs.map(item => item.id === tab.id ? { ...item, name: newName } : item));
+        } else {
+            render24hRows();
+        }
+    };
+
+    input.addEventListener("click", e => e.stopPropagation());
+    input.addEventListener("keydown", e => {
+        if (e.key === "Enter") finish(true);
+        if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    wrapper.replaceChild(input, targetEl);
+    input.focus();
+    input.select();
+}
+
+async function createChallenge24hVersionTab(tabs) {
+    const newName = prompt("請輸入新版本名稱", `版本 ${tabs.length + 1}`);
+    if (!newName) return;
+    const newTab = { id: `challenge-24h-${Date.now()}`, name: newName.trim() || `版本 ${tabs.length + 1}` };
+    active24hVersionTabId = newTab.id;
+    await saveChallenge24hVersionTabs([...tabs, newTab]);
+}
+
+async function deleteChallenge24hVersionTab(tab, tabs) {
+    if (tabs.length <= 1) {
+        alert("至少需要保留一個版本。");
+        render24hRows();
+        return;
+    }
+    const cardsInTab = cardsData.filter(card => card.section === "24h" && getChallenge24hCardVersionTabId(card) === tab.id);
+    if (!confirm(`確定要刪除「${tab.name}」版本嗎？此版本中的 ${cardsInTab.length} 張 24H 卡片也會刪除。`)) {
+        render24hRows();
+        return;
+    }
+
+    for (let i = 0; i < cardsInTab.length; i += 450) {
+        const batch = writeBatch(db);
+        cardsInTab.slice(i, i + 450).forEach(card => batch.delete(doc(db, "ptcg_cards", card.docId)));
+        await batch.commit();
+    }
+
+    const updatedTabs = tabs.filter(item => item.id !== tab.id);
+    if (active24hVersionTabId === tab.id) active24hVersionTabId = updatedTabs[0]?.id || DEFAULT_24H_VERSION_TAB_ID;
+    await saveChallenge24hVersionTabs(updatedTabs);
+}
+
 function openLobbyTabActions(tabBtn, tab, tabs) {
+    if (tab.id === AUTO_TEAM_LOBBY_TAB_ID) return;
     const wrapper = tabBtn.closest(".deck-tab-wrapper");
     const actions = document.createElement("div");
     actions.className = "meta-lobby-tab-actions";
@@ -1149,7 +2121,8 @@ function openLobbyTabActions(tabBtn, tab, tabs) {
 }
 
 async function deleteMetaLobbyTab(tab, tabs) {
-    if (tabs.length <= 1) {
+    if (tab.id === AUTO_TEAM_LOBBY_TAB_ID) return;
+    if (tabs.filter(item => item.id !== AUTO_TEAM_LOBBY_TAB_ID).length <= 1) {
         alert("至少需要保留一個版本。");
         renderMetaDecksList();
         return;
@@ -1205,21 +2178,14 @@ async function createMetaLobbyTab(tabs) {
     activeMetaLobbyTabId = newTab.id;
     await saveMetaLobbyTabs([...tabs, newTab]);
 
-    await Promise.all(sourceDecks.map(deck => {
-        const copiedDeck = JSON.parse(JSON.stringify(deck));
-        delete copiedDeck.docId;
-        delete copiedDeck.altAccData;
-        delete copiedDeck.challenge24hData;
-        delete copiedDeck.neededCardsData;
-        delete copiedDeck.generalData;
-        delete copiedDeck.twoStarData;
-        copiedDeck.deckData = {
-            ...(copiedDeck.deckData || {}),
+    await Promise.all(sourceDecks.map((deck, index) => addDoc(cardsCollection, {
+        section: "meta_deck",
+        deckData: cloneMetaDeckDataForCopy(deck.deckData || {}, {
             lobbyTabId: newTab.id,
-            order: copiedDeck.deckData?.order || Date.now()
-        };
-        return addDoc(cardsCollection, copiedDeck);
-    }));
+            version: newTab.name,
+            order: Date.now() + index
+        })
+    })));
 }
 
 async function reorderDeckTabs(deck, tabs, targetTabId) {
@@ -1259,7 +2225,7 @@ async function reorderDeckCards(targetIndex, targetType) {
 }
 
 // ==========================================
-// 🪄 渲染：二星卡
+// 🪄 渲染：高罕卡
 // ==========================================
 function renderTwoStarCardsRows() {
     rarityRowsContainerTwoStar.innerHTML = "";
@@ -1297,19 +2263,20 @@ function renderTwoStarCardsRows() {
             if (rarity.name === "2星") {
                 createTwoStarRow(rowBlock, targetCards, "支援者", "支援者", "general-row-top", rarity.name);
                 createTwoStarRow(rowBlock, targetCards, "寶可夢", "寶可夢", "general-row-bottom", rarity.name);
-            } else if (rarity.name === "2彩星") {
-                createTwoStarRow(rowBlock, targetCards, "寶可夢", "寶可夢", "general-row-bottom", rarity.name);
+            } else {
+                createTwoStarRow(rowBlock, targetCards, null, "", "general-row-bottom", rarity.name, true);
             }
         }
         
+        makeRarityBlockCollapsible(rowBlock);
         rarityRowsContainerTwoStar.appendChild(rowBlock);
     });
 }
 
-function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, rarityName) {
+function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, rarityName, hideLabel = false) {
     const statusRow = document.createElement("div");
     statusRow.className = `status-row ${className}`;
-    statusRow.innerHTML = `<div class="status-label">${labelText}</div>`;
+    statusRow.innerHTML = `<div class="status-label${hideLabel ? " status-label-count-only" : ""}">${labelText}</div>`;
 
     const cardsListDiv = document.createElement("div");
     cardsListDiv.className = "cards-horizontal-list";
@@ -1319,7 +2286,9 @@ function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, r
         if (currentTwoStarTab === "想要的卡" || currentTwoStarTab === "被交換的") return isTwoStarCardInRow(c, filterVal);
         return false;
     });
-    statusRow.querySelector(".status-label").innerHTML = `${labelText} <span class="rarity-count">${getCardsQuantityTotal(filteredCards)}</span>`;
+    statusRow.querySelector(".status-label").innerHTML = hideLabel
+        ? `<span class="rarity-count">${getCardsQuantityTotal(filteredCards)}</span>`
+        : `${labelText} <span class="rarity-count">${getCardsQuantityTotal(filteredCards)}</span>`;
 
     filteredCards.forEach(card => {
         const cardEl = document.createElement("div");
@@ -1457,6 +2426,7 @@ function renderGeneralCardsRows() {
         createHorizontalRowGeneral(rowBlock, targetCards, "false", "通用", "general-row-top", typeObj.name);
         createHorizontalRowGeneral(rowBlock, targetCards, "true", "特別屬性", "general-row-bottom", typeObj.name);
 
+        makeRarityBlockCollapsible(rowBlock);
         rarityRowsContainerGeneral.appendChild(rowBlock);
     });
 }
@@ -1525,6 +2495,7 @@ function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, c
         const displayImg = card.imageUrl ? card.imageUrl : "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
         const displayName = card.name ? card.name : "<span style='color:#ccc'>(未命名)</span>";
         const displayId = card.id ? `# ${card.id}` : "<span style='color:#ccc'>(無編號)</span>";
+        const tagHtml = renderGeneralCardTag(card);
 
         cardEl.innerHTML = `
             <button class="toggle-main-btn" title="切換分類狀態">🔄</button>
@@ -1532,6 +2503,7 @@ function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, c
             <div class="card-info">
                 <strong>${displayName}</strong>
                 ${displayId}
+                ${tagHtml}
             </div>
             <button class="del-card-btn" title="刪除卡片">✕</button>
             <button class="copy-card-btn" title="複製卡片">📄</button>
@@ -1674,6 +2646,7 @@ function renderNeededCardsRows() {
         cardsListDiv.appendChild(inlineAddBtn);
 
         rowBlock.appendChild(cardsListDiv);
+        makeRarityBlockCollapsible(rowBlock);
         rarityRowsContainerNeeded.appendChild(rowBlock);
     });
 }
@@ -1681,8 +2654,17 @@ function renderNeededCardsRows() {
 // --- 渲染：24H 得卡挑戰 ---
 function render24hRows() {
     rarityRowsContainer24h.innerHTML = "";
+    const versionTabs = getChallenge24hVersionTabs();
+    if (!versionTabs.some(tab => tab.id === active24hVersionTabId)) {
+        active24hVersionTabId = versionTabs[0]?.id || DEFAULT_24H_VERSION_TAB_ID;
+    }
+    renderChallenge24hTabs(versionTabs);
     rarities24h.forEach(rarity => {
-        const targetCards = cardsData.filter(c => c.section === "24h" && c.rarity === rarity.name);
+        const targetCards = cardsData.filter(c =>
+            c.section === "24h"
+            && getChallenge24hCardVersionTabId(c) === active24hVersionTabId
+            && c.rarity === rarity.name
+        );
         const ownedCount = targetCards.filter(c => c.computedOwnership && c.computedOwnership !== "無").length;
         
         const rowBlock = document.createElement("div");
@@ -1745,6 +2727,7 @@ function render24hRows() {
         cardsListDiv.appendChild(inlineAddBtn);
 
         rowBlock.appendChild(cardsListDiv);
+        makeRarityBlockCollapsible(rowBlock);
         rarityRowsContainer24h.appendChild(rowBlock);
     });
 }
@@ -1759,6 +2742,7 @@ function renderAltAccRows() {
         rowBlock.innerHTML = `<div class="rarity-header"><img src="${rarity.icon}"><span>${rarity.name} <span class="rarity-count">${getCardsQuantityTotal(targetCards)}</span></span></div>`;
         createHorizontalRowAlt(rowBlock, targetCards, "false", "主帳沒有的", "not-on-main", rarity.name);
         createHorizontalRowAlt(rowBlock, targetCards, "true", "主帳有的", "on-main", rarity.name);
+        makeRarityBlockCollapsible(rowBlock);
         rarityRowsContainerAlt.appendChild(rowBlock);
     });
 }
@@ -1840,6 +2824,15 @@ function updateTierFieldVisibility() {
     }
 }
 
+function updateHighRarityTypeVisibility() {
+    if (currentSection !== "two_star_cards") return;
+    const selectedTab = document.getElementById("card-two-star-tab").value;
+    const rarityVal = document.getElementById("card-rarity").value;
+    document.getElementById("group-two-star-status").style.display = selectedTab === "擁有的卡" ? "flex" : "none";
+    document.getElementById("group-two-star-type").style.display =
+        selectedTab !== "擁有的卡" && rarityVal === "2星" ? "flex" : "none";
+}
+
 function setupModalFields() {
     const groupAccType = document.getElementById("group-acc-type");
     const groupHasMain = document.getElementById("group-has-main");
@@ -1850,13 +2843,14 @@ function setupModalFields() {
     const groupRarity = document.getElementById("group-rarity");
     const groupGeneralType = document.getElementById("group-general-type");
     const groupGeneralSubtype = document.getElementById("group-general-subtype");
+    const groupGeneralTag = document.getElementById("group-general-tag");
 
     const groupTwoStarTab = document.getElementById("group-two-star-tab");
     const groupTwoStarStatus = document.getElementById("group-two-star-status");
     const groupTwoStarType = document.getElementById("group-two-star-type");
     const groupTwoStarTier = document.getElementById("group-two-star-tier");
 
-    [groupAccType, groupHasMain, groupOwnership, groupNeededQty, groupNeededTab, groupGeneralType, groupGeneralSubtype, groupTwoStarTab, groupTwoStarStatus, groupTwoStarType, groupTwoStarTier].forEach(g => g.style.display = "none");
+    [groupAccType, groupHasMain, groupOwnership, groupNeededQty, groupNeededTab, groupGeneralType, groupGeneralSubtype, groupGeneralTag, groupTwoStarTab, groupTwoStarStatus, groupTwoStarType, groupTwoStarTier].forEach(g => g.style.display = "none");
     
     groupRarity.style.display = "flex"; 
 
@@ -1869,20 +2863,53 @@ function setupModalFields() {
         groupRarity.style.display = "none";
         groupGeneralType.style.display = "flex";
         groupGeneralSubtype.style.display = "flex"; 
+        groupGeneralTag.style.display = "flex";
+        renderGeneralTagList();
     } else if (currentSection === "two_star_cards") {
         groupTwoStarTab.style.display = "flex";
-        if (currentTwoStarTab === "擁有的卡") {
-            groupTwoStarStatus.style.display = "flex";
-        } else {
-            groupTwoStarType.style.display = "flex";
-        }
+        updateHighRarityTypeVisibility();
     } else { 
         groupAccType.style.display = "flex";
         groupHasMain.style.display = "flex";
     }
 }
 
-document.getElementById("card-rarity").addEventListener("change", updateTierFieldVisibility);
+document.getElementById("card-rarity").addEventListener("change", () => {
+    updateTierFieldVisibility();
+    updateHighRarityTypeVisibility();
+});
+
+generalTagNameInput.addEventListener("focus", showGeneralTagOptions);
+generalTagNameInput.addEventListener("click", showGeneralTagOptions);
+generalTagNameInput.addEventListener("input", () => {
+    syncGeneralTagColorFromName();
+    showGeneralTagOptions();
+});
+generalTagNameInput.addEventListener("change", syncGeneralTagColorFromName);
+document.getElementById("card-general-type").addEventListener("change", () => {
+    generalTagNameInput.value = "";
+    generalTagColorInput.value = "#787774";
+    hideGeneralTagColorPopover();
+    renderGeneralTagList();
+    if (generalTagList.classList.contains("show")) showGeneralTagOptions();
+});
+document.getElementById("group-general-tag").addEventListener("click", (event) => event.stopPropagation());
+generalTagColorPopover.addEventListener("click", (event) => event.stopPropagation());
+document.addEventListener("click", (event) => {
+    if (!document.getElementById("group-general-tag").contains(event.target)
+        && !generalTagColorPopover.contains(event.target)) {
+        hideGeneralTagOptions();
+    }
+});
+
+cardForm.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    if (event.isComposing) return;
+    if (event.target.tagName === "TEXTAREA") return;
+    if (autocompleteList.classList.contains("show")) return;
+    event.preventDefault();
+    cardForm.requestSubmit();
+});
 
 function openNewModal(rarityName, typeName = null, hasMainVal = null) {
     editingCardDocId = null; 
@@ -1901,6 +2928,9 @@ function openNewModal(rarityName, typeName = null, hasMainVal = null) {
     document.getElementById("card-ownership").value = "無"; 
     document.getElementById("card-needed-qty").value = "1"; 
     document.getElementById("card-needed-tab").value = currentNeededTab; 
+    generalTagNameInput.value = "";
+    generalTagColorInput.value = "#787774";
+    renderGeneralTagList();
     
     document.getElementById("card-two-star-tab").value = currentTwoStarTab;
     document.getElementById("card-two-star-tier").value = "無"; 
@@ -1915,6 +2945,7 @@ function openNewModal(rarityName, typeName = null, hasMainVal = null) {
     colorSwatches[0].classList.add("selected");
 
     updateTierFieldVisibility();
+    updateHighRarityTypeVisibility();
     formModal.classList.add("show");
 }
 
@@ -1941,6 +2972,9 @@ function openEditModal(docId) {
         document.getElementById("card-needed-qty").value = card.neededCardsData?.quantity || "1";
         document.getElementById("card-needed-tab").value = card.neededCardsData?.tab || "缺少的卡";
         document.getElementById("card-general-type").value = card.generalData?.type || "支援者";
+        generalTagNameInput.value = card.generalData?.tagName || "";
+        generalTagColorInput.value = getGeneralTagColorMeta(card.generalData?.tagColor).value;
+        renderGeneralTagList();
         
         document.getElementById("card-two-star-tab").value = card.twoStarData?.tab || "擁有的卡";
         document.getElementById("card-two-star-status").value = card.twoStarData?.status || "主帳";
@@ -1959,6 +2993,7 @@ function openEditModal(docId) {
         if (matchSwatch) matchSwatch.classList.add("selected");
 
         updateTierFieldVisibility();
+        updateHighRarityTypeVisibility();
         formModal.classList.add("show");
     }
 }
@@ -1987,7 +3022,11 @@ cardForm.addEventListener("submit", async (e) => {
     };
 
     if (saveSection === "24h") {
-        cardObj.challenge24hData = { ownership: document.getElementById("card-ownership").value };
+        const existing24hCard = editingCardDocId ? cardsData.find(c => c.docId === editingCardDocId) : null;
+        cardObj.challenge24hData = {
+            ownership: document.getElementById("card-ownership").value,
+            versionTabId: existing24hCard?.challenge24hData?.versionTabId || active24hVersionTabId
+        };
     } else if (saveSection === "needed_cards") {
         const currentQty = parseInt(document.getElementById("card-needed-qty").value) || 1;
         cardObj.neededCardsData = { 
@@ -1996,9 +3035,12 @@ cardForm.addEventListener("submit", async (e) => {
             order: editingCardDocId ? (cardsData.find(c => c.docId === editingCardDocId)?.neededCardsData?.order || Date.now()) : Date.now()
         };
     } else if (saveSection === "general_cards") {
+        const tagName = generalTagNameInput.value.trim();
         cardObj.generalData = {
             type: document.getElementById("card-general-type").value,
             hasOnMain: document.getElementById("card-general-subtype").value,
+            tagName,
+            tagColor: tagName ? generalTagColorInput.value : "",
             order: editingCardDocId ? (cardsData.find(c => c.docId === editingCardDocId)?.generalData?.order || Date.now()) : Date.now()
         };
         cardObj.rarity = ""; 
@@ -2007,11 +3049,13 @@ cardForm.addEventListener("submit", async (e) => {
         cardObj.twoStarData = {
             tab: document.getElementById("card-two-star-tab").value,
             status: document.getElementById("card-two-star-status").value,
-            type: document.getElementById("card-two-star-type").value,
             tier: rarityInput === "2星" ? document.getElementById("card-two-star-tier").value : "無", 
             quantity: existingQty,
             order: editingCardDocId ? (cardsData.find(c => c.docId === editingCardDocId)?.twoStarData?.order || Date.now()) : Date.now()
         };
+        if (cardObj.twoStarData.tab === "擁有的卡" || rarityInput === "2星") {
+            cardObj.twoStarData.type = document.getElementById("card-two-star-type").value;
+        }
     } else {
         const existingQty = editingCardDocId ? getCardQuantity(cardsData.find(c => c.docId === editingCardDocId) || {}) : 1;
         cardObj.altAccData = {
@@ -2019,7 +3063,7 @@ cardForm.addEventListener("submit", async (e) => {
             hasOnMain: document.getElementById("card-has-main").value,
             quantity: existingQty
         };
-        if (rarityInput === "2星" || rarityInput === "2彩星") {
+        if (highRarityNames.has(rarityInput)) {
             cardObj.twoStarData = {
                 tab: "擁有的卡", 
                 status: document.getElementById("card-acc-type").value,
@@ -2031,10 +3075,38 @@ cardForm.addEventListener("submit", async (e) => {
         }
     }
     
-    if (editingCardDocId) {
+    let savedDocId = editingCardDocId;
+    const syncHighRarityToAltAcc = shouldSyncHighRarityToAltAcc(saveSection, rarityInput);
+    if (syncHighRarityToAltAcc) {
+        const existingAltCard = findMatchingAltAccHighRarityCard(
+            cardObj,
+            cardObj.twoStarData.status,
+            editingCardDocId
+        );
+        const altAccPayload = buildAltAccPayloadFromHighRarity(cardObj, cardObj.twoStarData, existingAltCard);
+        if (existingAltCard) {
+            await updateDoc(doc(db, "ptcg_cards", existingAltCard.docId), altAccPayload);
+            savedDocId = existingAltCard.docId;
+        } else {
+            const newDoc = await addDoc(cardsCollection, altAccPayload);
+            savedDocId = newDoc.id;
+        }
+
+        if (editingCardDocId) {
+            const existingCard = cardsData.find(c => c.docId === editingCardDocId);
+            if (existingCard?.section === "two_star_cards") {
+                await deleteDoc(doc(db, "ptcg_cards", editingCardDocId));
+            }
+        }
+    } else if (editingCardDocId) {
         await updateDoc(doc(db, "ptcg_cards", editingCardDocId), cardObj);
     } else {
-        await addDoc(cardsCollection, cardObj);
+        const newDoc = await addDoc(cardsCollection, cardObj);
+        savedDocId = newDoc.id;
+    }
+
+    if (saveSection === "general_cards" && cardObj.generalData?.tagName) {
+        await syncSharedGeneralTagColor(cardObj.generalData.tagName, cardObj.generalData.tagColor, cardObj.generalData.type, savedDocId);
     }
 
     formModal.classList.remove("show");
@@ -2052,16 +3124,23 @@ deckForm.addEventListener("submit", async (e) => {
     submitBtn.disabled = true;
 
     const existingDeck = editingDeckDocId ? cardsData.find(c => c.docId === editingDeckDocId) : null;
+    const selectedLobbyTabId = document.getElementById("deck-version").value || activeMetaLobbyTabId;
     const deckData = {
         name: document.getElementById("deck-name").value.trim(),
+        version: getMetaLobbyTabName(selectedLobbyTabId),
         coverImg: document.getElementById("deck-img").value.trim(),
         tier: document.getElementById("deck-tier").value,
         attribute: document.getElementById("deck-attribute").value,
-        cards: existingDeck?.deckData?.cards || [], 
+        cards: cloneDeckCards(existingDeck?.deckData?.cards || []), 
         order: existingDeck?.deckData?.order || Date.now(),
-        lobbyTabId: existingDeck ? getDeckLobbyTabId(existingDeck) : activeMetaLobbyTabId
+        lobbyTabId: selectedLobbyTabId
     };
-    if (existingDeck?.deckData?.tabs) deckData.tabs = existingDeck.deckData.tabs;
+    if (existingDeck?.deckData?.tabs) {
+        deckData.tabs = cloneDeckTabs(existingDeck.deckData.tabs);
+    } else if (!editingDeckDocId) {
+        deckData.cards = buildDefaultNewDeckCards();
+        deckData.tabs = buildDefaultNewDeckTabs(deckData);
+    }
     
     if (editingDeckDocId) {
         await updateDoc(doc(db, "ptcg_cards", editingDeckDocId), {
@@ -2099,7 +3178,8 @@ deckCardForm.addEventListener("submit", async (e) => {
             name: document.getElementById("deck-card-name").value.trim(),
             img: document.getElementById("deck-card-img").value.trim(),
             type: getDeckCardType(document.getElementById("deck-card-type").value),
-            qty: parseInt(document.getElementById("deck-card-qty").value) || 1
+            qty: getDeckCardQuantity(),
+            bgColor: deckColorInput?.value || "#ffffff"
         };
 
         const { tabs, activeTab } = getActiveDeckTab(deck);
@@ -2148,7 +3228,8 @@ document.getElementById("add-second-source-card").addEventListener("click", () =
         alternativeIndex: null
     };
     deckReplacementForm.reset();
-    document.getElementById("deck-replacement-modal-title").innerText = "新增基準卡";
+    setDeckReplacementQuantity(1);
+    document.getElementById("deck-replacement-modal-title").innerText = "➕ 新增基準卡";
     document.getElementById("add-second-source-card").style.display = "none";
     document.getElementById("deck-replacement-name").focus();
 });
@@ -2160,7 +3241,8 @@ deckReplacementForm.addEventListener("submit", async (e) => {
 
     const card = {
         name: document.getElementById("deck-replacement-name").value.trim(),
-        img: document.getElementById("deck-replacement-img").value.trim()
+        img: document.getElementById("deck-replacement-img").value.trim(),
+        qty: getDeckReplacementQuantity()
     };
     const { tabs, activeTab } = getActiveDeckTab(deck);
     const replacements = cloneDeckReplacements(activeTab.replacements || []);
@@ -2175,13 +3257,13 @@ deckReplacementForm.addEventListener("submit", async (e) => {
     if (editingReplacementContext.role === "source") {
         group.sources = getReplacementSources(group);
         if (editingReplacementContext.alternativeIndex === null) {
-            group.sources.push(card);
+            if (group.sources.length < 3) group.sources.push(card);
         } else {
             group.sources[editingReplacementContext.alternativeIndex] = card;
         }
         delete group.source;
     } else if (editingReplacementContext.alternativeIndex === null) {
-        group.alternatives.push(card);
+        if (group.alternatives.length < 3) group.alternatives.push(card);
     } else {
         group.alternatives[editingReplacementContext.alternativeIndex] = card;
     }
@@ -2233,6 +3315,14 @@ colorSwatches.forEach(swatch => {
         colorSwatches.forEach(s => s.classList.remove("selected"));
         swatch.classList.add("selected");
         colorInput.value = swatch.getAttribute("data-color");
+    });
+});
+
+deckColorSwatches.forEach(swatch => {
+    swatch.addEventListener("click", () => {
+        deckColorSwatches.forEach(s => s.classList.remove("selected"));
+        swatch.classList.add("selected");
+        deckColorInput.value = swatch.getAttribute("data-color");
     });
 });
 
@@ -2431,6 +3521,7 @@ document.addEventListener("click", (e) => {
 });
 
 colorInput.addEventListener("input", () => colorSwatches.forEach(s => s.classList.remove("selected")));
+deckColorInput?.addEventListener("input", () => deckColorSwatches.forEach(s => s.classList.remove("selected")));
 
 const accTabs = document.querySelectorAll(".acc-tab-btn");
 accTabs.forEach(tab => {
@@ -2463,9 +3554,7 @@ twoStarTabs.forEach(tab => {
 });
 
 document.getElementById("card-two-star-tab").addEventListener("change", (e) => {
-    const isOwned = e.target.value === "擁有的卡";
-    document.getElementById("group-two-star-status").style.display = isOwned ? "flex" : "none";
-    document.getElementById("group-two-star-type").style.display = isOwned ? "none" : "flex";
+    updateHighRarityTypeVisibility();
 });
 
 const lightboxModal = document.getElementById('lightbox-modal');
@@ -2515,6 +3604,23 @@ window.addEventListener("click", (e) => {
 // ==========================================
 rarityRowsContainerAlt.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>📡 建立即時連線中...</p>";
 
+function showFirestoreLoadError(error) {
+    console.error("Firestore 即時連線失敗：", error);
+    const message = error?.code === "permission-denied"
+        ? "資料庫權限不足，請檢查 Firebase Firestore Rules。"
+        : `資料庫連線失敗：${error?.message || "未知錯誤"}`;
+    const html = `<p style="text-align:center; color:#d9363e; padding:20px;">${message}</p>`;
+    [
+        rarityRowsContainerAlt,
+        rarityRowsContainer24h,
+        rarityRowsContainerNeeded,
+        rarityRowsContainerGeneral,
+        rarityRowsContainerTwoStar
+    ].forEach(container => {
+        if (container) container.innerHTML = html;
+    });
+}
+
 onSnapshot(cardsCollection, (snapshot) => {
     uniqueCardsDict = {};
 
@@ -2533,6 +3639,12 @@ onSnapshot(cardsCollection, (snapshot) => {
             altAccData = data.altAccData || null;
         }
         let challenge24hData = data.challenge24hData || (section === "24h" ? { ownership: data.ownership } : null);
+        if (section === "24h" && challenge24hData) {
+            challenge24hData = {
+                ...challenge24hData,
+                versionTabId: challenge24hData.versionTabId || DEFAULT_24H_VERSION_TAB_ID
+            };
+        }
         let neededCardsData = data.neededCardsData || (section === "needed_cards" ? { quantity: data.quantity || 1, order: data.order || Date.now(), tab: data.tab || "缺少的卡" } : null);
         let generalData = data.generalData || (section === "general_cards" ? { type: data.type || "支援者", order: data.order || Date.now(), hasOnMain: data.hasOnMain || "false" } : null);
         
@@ -2545,7 +3657,7 @@ onSnapshot(cardsCollection, (snapshot) => {
         } : null);
         if (twoStarData?.status === "本帳") twoStarData.status = "主帳";
 
-        if (section === "alt_acc" && (data.rarity === "2星" || data.rarity === "2彩星")) {
+        if (section === "alt_acc" && highRarityNames.has(data.rarity)) {
             twoStarData = twoStarData ? { ...twoStarData } : {};
             twoStarData.tab = "擁有的卡";
             twoStarData.status = altAccData?.accountType || "小帳"; 
@@ -2601,4 +3713,4 @@ onSnapshot(cardsCollection, (snapshot) => {
     });
     
     renderAllViews();
-});
+}, showFirestoreLoadError);

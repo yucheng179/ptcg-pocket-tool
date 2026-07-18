@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的 PTCG Pocket 專業圖鑑</title>
+    <title>我的 PTCG Pocket 自製小工具</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -19,7 +19,7 @@
                 <li id="nav-meta-decks"><span class="nav-icon">🔥</span><span class="nav-text">Meta牌組</span></li>
                 <li id="nav-needed-cards"><span class="nav-icon">🎯</span><span class="nav-text">需要卡</span></li>
                 <li id="nav-general-cards"><span class="nav-icon">🛠️</span><span class="nav-text">泛用卡</span></li>
-                <li id="nav-two-star-cards"><span class="nav-icon">🌟</span><span class="nav-text">二星</span></li>
+                <li id="nav-two-star-cards"><span class="nav-icon">🌟</span><span class="nav-text">高星卡</span></li>
                 <li id="nav-alt-acc" class="active"><span class="nav-icon">🌱</span><span class="nav-text">小帳資源</span></li>
                 <li id="nav-24h-challenge"><span class="nav-icon">⏱️</span><span class="nav-text">24H得卡挑戰</span></li>
             </ul>
@@ -39,10 +39,7 @@
             </section>
 
             <section id="view-24h-challenge" class="content-section" style="display: none;">
-                <div class="version-container">
-                    <label>版本：B3a</label>
-                    <img src="https://cdn.raenonx.cc/api/image/ptcgp?format=webp&url=/images/game/card/expansion/logo/zh/B3a.png&w=96&q=75" alt="B3a">
-                </div>
+                <div id="challenge-24h-tabs" class="deck-tabs-bar challenge-24h-tabs"></div>
                 <div id="rarity-rows-24h-container" class="rarity-rows-container"></div>
             </section>
 
@@ -69,7 +66,16 @@
 
             <section id="view-meta-decks" class="content-section" style="display: none;">
                 <div id="meta-decks-list-view">
-                    <div id="meta-lobby-tabs" class="deck-tabs-bar meta-lobby-tabs"></div>
+                    <div class="meta-lobby-tabs-row">
+                        <div id="meta-lobby-tabs" class="deck-tabs-bar meta-lobby-tabs"></div>
+                    </div>
+                    <div class="deck-tier-block" id="auto-team-block" style="display: none;">
+                        <div class="decks-grid" id="auto-team-grid"></div>
+                    </div>
+                    <div class="deck-tier-block" id="tier-0-block">
+                        <h2 class="deck-tier-heading">👑 Tier 0</h2>
+                        <div class="decks-grid" id="tier-0-grid"></div>
+                    </div>
                     <div class="deck-tier-block" id="tier-1-block">
                         <h2 class="deck-tier-heading">🏆 Tier 1</h2>
                         <div class="decks-grid" id="tier-1-grid"></div>
@@ -142,6 +148,7 @@
                         <option value="支援者">支援者</option>
                         <option value="物品">物品</option>
                         <option value="道具">道具</option>
+                        <option value="競技場">競技場</option>
                         <option value="寶可夢">寶可夢</option>
                     </select>
                 </div>
@@ -154,8 +161,15 @@
                     </select>
                 </div>
 
+                <div class="input-group" id="group-general-tag" style="display: none;">
+                    <label>泛用卡標籤：</label>
+                    <input type="text" id="card-general-tag-name" placeholder="選擇或輸入新標籤">
+                    <div id="general-tag-list" class="general-tag-options"></div>
+                    <input type="hidden" id="card-general-tag-color" value="#787774">
+                </div>
+
                 <div class="input-group" id="group-two-star-tab" style="display: none;">
-                    <label>二星卡分類：</label>
+                    <label>高罕卡分類：</label>
                     <select id="card-two-star-tab">
                         <option value="擁有的卡">擁有的卡</option>
                         <option value="想要的卡">想要的卡</option>
@@ -252,6 +266,8 @@
         </div>
     </div>
 
+    <div id="general-tag-color-popover" class="general-tag-color-popover"></div>
+
     <div id="deck-form-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" id="close-deck-modal">&times;</span>
@@ -266,8 +282,13 @@
                     <input type="url" id="deck-img" placeholder="請貼上封面圖片網址" required>
                 </div>
                 <div class="input-group">
+                    <label>版本：</label>
+                    <select id="deck-version"></select>
+                </div>
+                <div class="input-group">
                     <label>所屬強度 (Tier)：</label>
                     <select id="deck-tier">
+                        <option value="Tier 0">Tier 0</option>
                         <option value="Tier 1">Tier 1</option>
                         <option value="Tier 2">Tier 2</option>
                         <option value="Tier 3">Tier 3 & 其他</option>
@@ -284,8 +305,8 @@
                         <option value="鬥">鬥</option>
                         <option value="惡">惡</option>
                         <option value="鋼">鋼</option>
-                        <option value="無">無</option>
                         <option value="龍">龍</option>
+                        <option value="無">無</option>
                     </select>
                 </div>
                 <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">儲存牌組</button>
@@ -317,7 +338,24 @@
                 </div>
                 <div class="input-group">
                     <label>投入數量：</label>
-                    <input type="number" id="deck-card-qty" value="2" min="1" max="2" required>
+                    <div id="deck-card-qty" class="deck-qty-selector" role="radiogroup" aria-label="投入數量">
+                        <button type="button" class="deck-qty-option" data-qty="1" role="radio" aria-checked="false">1</button>
+                        <button type="button" class="deck-qty-option active" data-qty="2" role="radio" aria-checked="true">2</button>
+                    </div>
+                </div>
+                <div class="input-group">
+                    <label>卡片底色 (快速選擇或自訂)：</label>
+                    <div class="color-palette" id="deck-card-color-palette">
+                        <div class="deck-color-swatch selected" style="background-color: #FFFFFF;" data-color="#FFFFFF" title="白色"></div>
+                        <div class="deck-color-swatch" style="background-color: #FFB7B2;" data-color="#FFB7B2" title="淺紅"></div>
+                        <div class="deck-color-swatch" style="background-color: #FFCC6E;" data-color="#FFCC6E" title="淺橘"></div>
+                        <div class="deck-color-swatch" style="background-color: #FFFFBE;" data-color="#FFFFBE" title="淺黃"></div>
+                        <div class="deck-color-swatch" style="background-color: #D2EEA5;" data-color="#D2EEA5" title="淺綠"></div>
+                        <div class="deck-color-swatch" style="background-color: #E0E0FF;" data-color="#E0E0FF" title="淺藍"></div>
+                        <div class="deck-color-swatch" style="background-color: #FFEAFF;" data-color="#FFEAFF" title="淺紫"></div>
+                        <div class="deck-color-swatch" style="background-color: #D3D3D3;" data-color="#D3D3D3" title="淺灰"></div>
+                        <input type="color" id="deck-card-bgcolor" value="#ffffff" title="自訂其他顏色">
+                    </div>
                 </div>
                 <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">加入牌組</button>
             </form>
@@ -346,16 +384,23 @@
     <div id="deck-replacement-form-modal" class="modal">
         <div class="modal-content">
             <span class="close-btn" id="close-deck-replacement-modal">&times;</span>
-            <h2 id="deck-replacement-modal-title">編輯可替換卡片</h2>
+            <h2 id="deck-replacement-modal-title">✏️ 編輯可替換卡片</h2>
             <form id="deck-replacement-form">
                 <div class="input-group" style="position: relative;">
-                    <label>卡片名稱：</label>
-                    <input type="text" id="deck-replacement-name" placeholder="輸入卡片名稱" autocomplete="off" required>
+                    <label>搜尋卡片名稱：</label>
+                    <input type="text" id="deck-replacement-name" placeholder="例如: 神奇糖果" autocomplete="off" required>
                     <div id="deck-replacement-autocomplete-list" class="autocomplete-dropdown"></div>
                 </div>
                 <div class="input-group">
                     <label>圖片網址：</label>
                     <input type="url" id="deck-replacement-img" placeholder="輸入卡片圖片網址">
+                </div>
+                <div class="input-group">
+                    <label>投入數量：</label>
+                    <div id="deck-replacement-qty" class="deck-qty-selector" role="radiogroup" aria-label="替換卡投入數量">
+                        <button type="button" class="deck-replacement-qty-option active" data-qty="1" role="radio" aria-checked="true">1</button>
+                        <button type="button" class="deck-replacement-qty-option" data-qty="2" role="radio" aria-checked="false">2</button>
+                    </div>
                 </div>
                 <button type="button" id="add-second-source-card" class="btn-secondary" style="display:none; width:100%; margin-top: 10px;">＋ 新增基準卡</button>
                 <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">儲存卡片</button>

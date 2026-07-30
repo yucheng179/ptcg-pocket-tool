@@ -15,7 +15,7 @@
             </div>
             <ul id="sidebar-menu" class="sidebar-menu">
                 <li><span class="nav-icon">✨</span><span class="nav-text">稀有度</span></li>
-                <li><span class="nav-icon">📦</span><span class="nav-text">系列卡包</span></li>
+                <li id="nav-card-catalog"><span class="nav-icon">📦</span><span class="nav-text">卡片圖鑑</span></li>
                 <li id="nav-meta-decks"><span class="nav-icon">🔥</span><span class="nav-text">Meta牌組</span></li>
                 <li id="nav-needed-cards"><span class="nav-icon">🎯</span><span class="nav-text">需要卡</span></li>
                 <li id="nav-general-cards"><span class="nav-icon">🛠️</span><span class="nav-text">泛用卡</span></li>
@@ -53,6 +53,28 @@
 
             <section id="view-general-cards" class="content-section" style="display: none;">
                 <div id="rarity-rows-general-container" class="rarity-rows-container"></div>
+            </section>
+
+            <section id="view-card-catalog" class="content-section" style="display: none;">
+                <div id="catalog-expansion-list-view">
+                    <div class="account-tabs catalog-series-tabs">
+                        <button class="tab-btn catalog-series-tab-btn active" data-series="B">B系列</button>
+                        <button class="tab-btn catalog-series-tab-btn" data-series="A">A系列</button>
+                        <button class="tab-btn catalog-series-tab-btn" data-series="PROMO">Promo</button>
+                    </div>
+                    <div id="catalog-expansions-grid" class="catalog-expansions-grid"></div>
+                </div>
+                <div id="catalog-expansion-detail-view" style="display: none;">
+                    <div class="catalog-detail-header">
+                        <button id="btn-back-catalog-expansions" class="btn-secondary">🔙 返回擴充包列表</button>
+                        <div class="catalog-detail-title">
+                            <img id="catalog-detail-logo" src="" alt="">
+                            <h2 id="catalog-detail-name"></h2>
+                        </div>
+                        <button id="btn-toggle-catalog-cardtype" class="btn-secondary">依類型分群</button>
+                    </div>
+                    <div id="catalog-cards-grid" class="catalog-cards-grid"></div>
+                </div>
             </section>
 
             <section id="view-two-star-cards" class="content-section" style="display: none;">
@@ -218,8 +240,8 @@
                         <option value="1星">1星</option>
                         <option value="2星">2星</option>
                         <option value="3星">3星</option>
-                        <option value="1彩星">1彩星</option>
-                        <option value="2彩星">2彩星</option>
+                        <option value="1閃">1閃</option>
+                        <option value="2閃">2閃</option>
                         <option value="皇冠">皇冠</option>
                     </select>
                 </div>
@@ -322,6 +344,8 @@
                 <div class="input-group" style="position: relative;">
                     <label>搜尋寶可夢名稱：</label>
                     <input type="text" id="deck-card-name" placeholder="例如: 妙蛙種子" autocomplete="off" required>
+                    <input type="hidden" id="deck-card-id">
+                    <input type="hidden" id="deck-card-rarity">
                     <div id="deck-autocomplete-list" class="autocomplete-dropdown"></div>
                 </div>
                 <div class="input-group">

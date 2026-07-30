@@ -13,9 +13,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const cardsCollection = collection(db, "ptcg_cards"); 
+const cardCatalogCollection = collection(db, "ptcg_card_catalog");
 
 let cardsData = [];
 let uniqueCardsDict = {}; 
+let catalogCardsData = [];
+let activeCatalogExpansionId = null;
+let activeCatalogSeries = "B";
+let catalogGroupByCardType = false;
+let catalogCollapsedTypeGroups = new Set();
 
 let currentSection = "alt_acc"; 
 let currentAccountTab = "小帳";
@@ -42,13 +48,19 @@ let active24hVersionTabId = DEFAULT_24H_VERSION_TAB_ID;
 let challenge24hTabClickTimer = null;
 
 // --- 常數定義 ---
+const catalogExpansionIds = [
+    "A1", "A1a", "A2", "A2a", "A2b", "A3", "A3a", "A3b", "A4", "A4a", "A4b",
+    "B1", "B1a", "B2", "B2a", "B2b", "B3", "B3a", "B3b", "B4"
+];
+const catalogPromoExpansionIds = ["PROMO-A", "PROMO-B"];
+
 const raritiesAlt = [
     { name: "4菱", icon: "https://img.game8.co/3995617/622e1c0cca9ffdaa43cdd588b8e18d78.png/show" },
     { name: "1星", icon: "https://img.game8.co/3994721/895579e1516f605b7882b0909f329b7e.png/show" },
     { name: "2星", icon: "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show" },
     { name: "3星", icon: "https://img.game8.co/3995619/a0d611ce374e3070c530ee8d3fd81efa.png/show" },
-    { name: "1彩星", icon: "https://img.game8.co/4137129/6510d1633ee489b2e8fcba939d7e99cb.png/show" }, 
-    { name: "2彩星", icon: "https://img.game8.co/4137130/6eb953da81d509f5f6fde8f63ded90f6.png/show" },
+    { name: "1閃", icon: "https://img.game8.co/4137129/6510d1633ee489b2e8fcba939d7e99cb.png/show" }, 
+    { name: "2閃", icon: "https://img.game8.co/4137130/6eb953da81d509f5f6fde8f63ded90f6.png/show" },
     { name: "皇冠", icon: "https://img.game8.co/3997607/303598e292a532bcde37ab527a0ac263.png/show" }
 ];
 
@@ -74,7 +86,7 @@ const raritiesNeededGold = [
 
 const raritiesTwoStar = [
     { name: "2星", icon: "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show" },
-    { name: "2彩星", icon: "https://img.game8.co/4137130/6eb953da81d509f5f6fde8f63ded90f6.png/show" },
+    { name: "2閃", icon: "https://img.game8.co/4137130/6eb953da81d509f5f6fde8f63ded90f6.png/show" },
     { name: "3星", icon: "https://img.game8.co/3995619/a0d611ce374e3070c530ee8d3fd81efa.png/show" },
     { name: "皇冠", icon: "https://img.game8.co/3997607/303598e292a532bcde37ab527a0ac263.png/show" }
 ];
@@ -269,6 +281,34 @@ function getAutocompleteMatches(filterText = "") {
     return Object.entries(uniqueCardsDict)
         .filter(([normalizedName]) => normalizedName.includes(normalizedFilter))
         .flatMap(([, variants]) => variants.map((data, variantIndex) => ({ name: data.name, data, variantIndex })));
+}
+
+function addCardRecordToAutocompleteDict(card = {}) {
+    addUniqueCardToDict(card);
+
+    if (card.section !== "meta_deck" || !card.deckData) return;
+
+    const deckCards = Array.isArray(card.deckData.cards) ? card.deckData.cards : [];
+    deckCards.forEach(deckCard => addUniqueCardToDict(deckCard));
+
+    const deckTabs = Array.isArray(card.deckData.tabs) ? card.deckData.tabs : [];
+    deckTabs.forEach(tab => {
+        if (tab.coverCard) addUniqueCardToDict({ name: tab.coverCard.name, img: tab.coverCard.img || tab.coverImg });
+        if (tab.coverName || tab.coverImg) addUniqueCardToDict({ name: tab.coverName, img: tab.coverImg });
+        if (Array.isArray(tab.cards)) tab.cards.forEach(deckCard => addUniqueCardToDict(deckCard));
+        if (Array.isArray(tab.replacements)) {
+            tab.replacements.forEach(group => {
+                getReplacementSources(group).forEach(deckCard => addUniqueCardToDict(deckCard));
+                if (Array.isArray(group.alternatives)) group.alternatives.forEach(deckCard => addUniqueCardToDict(deckCard));
+            });
+        }
+    });
+}
+
+function rebuildUniqueCardsDict(cardRecords = cardsData) {
+    uniqueCardsDict = {};
+    catalogCardsData.forEach(card => addUniqueCardToDict(card));
+    cardRecords.forEach(card => addCardRecordToAutocompleteDict(card));
 }
 
 function getCardQuantity(card) {
@@ -884,6 +924,8 @@ function openDeckCardModal(rowType, card = null, index = null) {
     document.querySelector("#deck-card-form-modal h2").innerText = index === null ? "➕ 放入卡牌至牌組" : "✏️ 編輯牌組卡片";
     deckCardForm.querySelector('button[type="submit"]').innerText = index === null ? "加入牌組" : "儲存卡片";
     document.getElementById("deck-card-name").value = card?.name || "";
+    document.getElementById("deck-card-id").value = card?.id || "";
+    document.getElementById("deck-card-rarity").value = card?.rarity || "";
     document.getElementById("deck-card-img").value = card?.img || "";
     document.getElementById("deck-card-type").value = getDeckCardType(card?.type || rowType);
     setDeckCardQuantity(card?.qty || 2);
@@ -1000,6 +1042,15 @@ const rarityRowsContainer24h = document.getElementById("rarity-rows-24h-containe
 const rarityRowsContainerNeeded = document.getElementById("rarity-rows-needed-container");
 const rarityRowsContainerGeneral = document.getElementById("rarity-rows-general-container");
 const rarityRowsContainerTwoStar = document.getElementById("rarity-rows-two-star-container");
+const catalogExpansionListView = document.getElementById("catalog-expansion-list-view");
+const catalogExpansionDetailView = document.getElementById("catalog-expansion-detail-view");
+const catalogExpansionsGrid = document.getElementById("catalog-expansions-grid");
+const catalogCardsGrid = document.getElementById("catalog-cards-grid");
+const catalogDetailLogo = document.getElementById("catalog-detail-logo");
+const catalogDetailName = document.getElementById("catalog-detail-name");
+const btnBackCatalogExpansions = document.getElementById("btn-back-catalog-expansions");
+const btnToggleCatalogCardType = document.getElementById("btn-toggle-catalog-cardtype");
+const catalogSeriesTabs = document.querySelectorAll(".catalog-series-tab-btn");
 
 const formModal = document.getElementById("form-modal");
 const cardForm = document.getElementById("card-form");
@@ -1025,6 +1076,7 @@ const navNeeded = document.getElementById("nav-needed-cards");
 const navGeneral = document.getElementById("nav-general-cards");
 const navTwoStar = document.getElementById("nav-two-star-cards");
 const navMetaDecks = document.getElementById("nav-meta-decks");
+const navCardCatalog = document.getElementById("nav-card-catalog");
 
 const viewAltAcc = document.getElementById("view-alt-acc");
 const view24h = document.getElementById("view-24h-challenge");
@@ -1032,6 +1084,7 @@ const viewNeeded = document.getElementById("view-needed-cards");
 const viewGeneral = document.getElementById("view-general-cards");
 const viewTwoStar = document.getElementById("view-two-star-cards");
 const viewMetaDecks = document.getElementById("view-meta-decks");
+const viewCardCatalog = document.getElementById("view-card-catalog");
 
 const pageTitle = document.getElementById("page-title");
 const sidebar = document.getElementById('sidebar');
@@ -1072,8 +1125,10 @@ const deckReplacementForm = document.getElementById("deck-replacement-form");
 // ==========================================
 function switchSection(sectionName, titleText, navEl, viewEl) {
     currentSection = sectionName;
-    [navAltAcc, nav24h, navNeeded, navGeneral, navTwoStar, navMetaDecks].forEach(el => el.classList.remove("active"));
-    [viewAltAcc, view24h, viewNeeded, viewGeneral, viewTwoStar, viewMetaDecks].forEach(el => el.style.display = "none");
+    [navAltAcc, nav24h, navNeeded, navGeneral, navTwoStar, navMetaDecks, navCardCatalog].forEach(el => el?.classList.remove("active"));
+    [viewAltAcc, view24h, viewNeeded, viewGeneral, viewTwoStar, viewMetaDecks, viewCardCatalog].forEach(el => {
+        if (el) el.style.display = "none";
+    });
     
     navEl.classList.add("active");
     viewEl.style.display = "block";
@@ -1086,6 +1141,15 @@ function switchSection(sectionName, titleText, navEl, viewEl) {
         metaDeckDetailView.style.display = "none";
         scrollMainToTop();
     }
+    if (sectionName === "card_catalog") {
+        activeCatalogSeries = "B";
+        activeCatalogExpansionId = null;
+        catalogGroupByCardType = false;
+        catalogSeriesTabs.forEach(tab => tab.classList.toggle("active", tab.dataset.series === activeCatalogSeries));
+        catalogExpansionListView.style.display = "block";
+        catalogExpansionDetailView.style.display = "none";
+        scrollMainToTop();
+    }
 
     renderAllViews();
 }
@@ -1096,10 +1160,226 @@ navNeeded.addEventListener("click", () => switchSection("needed_cards", "需要�
 navGeneral.addEventListener("click", () => switchSection("general_cards", "泛用卡", navGeneral, viewGeneral));
 navTwoStar.addEventListener("click", () => switchSection("two_star_cards", "高罕卡", navTwoStar, viewTwoStar));
 navMetaDecks.addEventListener("click", () => switchSection("meta_decks", "Meta牌組", navMetaDecks, viewMetaDecks));
+navCardCatalog.addEventListener("click", () => switchSection("card_catalog", "卡片圖鑑", navCardCatalog, viewCardCatalog));
 
 function scrollMainToTop() {
     document.querySelector(".main-content")?.scrollTo({ top: 0, behavior: "smooth" });
 }
+
+function getCdnImageUrl(path) {
+    return `https://cdn.raenonx.cc/api/image/ptcgp?format=webp&url=/images/${path}`;
+}
+
+function getCatalogExpansionLogoUrl(expansionId) {
+    return getCdnImageUrl(`game/card/expansion/logo/zh/${expansionId}.png`);
+}
+
+function getCatalogExpansionBadgeUrl(expansionId) {
+    return getCdnImageUrl(`game/card/expansion/badge/${expansionId}.png`);
+}
+
+function getCatalogCardTypeLabel(cardType = "") {
+    const normalized = getCatalogCardTypeKey(cardType);
+    if (normalized === "pokemon") return "寶可夢";
+    if (normalized === "trainer") return "訓練家";
+    if (normalized === "support") return "支援者";
+    if (normalized === "item") return "物品";
+    if (normalized === "pokemontool") return "寶可夢道具";
+    if (normalized === "stadium") return "競技場";
+    if (normalized === "energy") return "能量";
+    return cardType || "其他";
+}
+
+function getCatalogCardTypeKey(cardType = "") {
+    const normalized = String(cardType || "").trim().toLowerCase();
+    if (normalized === "supporter") return "support";
+    if (normalized === "pokemon_tool" || normalized === "pokemon-tool") return "pokemontool";
+    return normalized || "other";
+}
+
+function getCatalogCardTypeSortIndex(cardType = "") {
+    const order = ["pokemon", "support", "item", "pokemontool", "stadium"];
+    const index = order.indexOf(getCatalogCardTypeKey(cardType));
+    return index === -1 ? order.length : index;
+}
+
+function getCatalogExpansionCards(expansionId) {
+    return catalogCardsData
+        .filter(card => card.expansion === expansionId)
+        .sort((a, b) => (a.id || "").localeCompare(b.id || "", "en", { numeric: true }));
+}
+
+function getVisibleCatalogExpansionIds() {
+    const existingIds = new Set(catalogCardsData.map(card => card.expansion).filter(Boolean));
+    if (activeCatalogSeries === "PROMO") {
+        const promoIds = Array.from(existingIds)
+            .filter(id => /^PROMO/i.test(id))
+            .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+        return Array.from(new Set([...catalogPromoExpansionIds, ...promoIds]));
+    }
+
+    const baseIds = catalogExpansionIds.filter(id => id.startsWith(activeCatalogSeries));
+    const extraIds = Array.from(existingIds)
+        .filter(id => !catalogExpansionIds.includes(id) && id.startsWith(activeCatalogSeries) && /^[AB]\d[a-z]?$/i.test(id))
+        .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+    return [...baseIds, ...extraIds];
+}
+
+function renderCardCatalog() {
+    if (!catalogExpansionListView || !catalogExpansionDetailView) return;
+
+    if (activeCatalogExpansionId) {
+        renderCatalogExpansionDetail(activeCatalogExpansionId);
+        return;
+    }
+
+    catalogExpansionListView.style.display = "block";
+    catalogExpansionDetailView.style.display = "none";
+
+    if (!catalogCardsData.length) {
+        catalogExpansionsGrid.innerHTML = `
+            <div class="catalog-empty-state">
+                <strong>尚未載入卡片圖鑑資料</strong>
+                <span>請先匯入 ptcg_card_catalog，或稍等 Firebase 同步完成。</span>
+            </div>
+        `;
+        return;
+    }
+
+    catalogExpansionsGrid.innerHTML = "";
+    getVisibleCatalogExpansionIds().forEach(expansionId => {
+        const cards = getCatalogExpansionCards(expansionId);
+        const expansionEl = document.createElement("button");
+        expansionEl.type = "button";
+        expansionEl.className = "catalog-expansion-card";
+        expansionEl.innerHTML = `
+            <div class="catalog-expansion-cover">
+                <img class="catalog-expansion-logo" src="${getCatalogExpansionLogoUrl(expansionId)}" alt="${expansionId}" onerror="this.style.display='none'; this.closest('.catalog-expansion-cover').classList.add('no-logo');">
+                <span class="catalog-expansion-fallback">${expansionId}</span>
+            </div>
+            <div class="catalog-expansion-info">
+                <span class="catalog-expansion-id">${expansionId}</span>
+                <span class="catalog-expansion-count">${cards.length} 張</span>
+            </div>
+        `;
+        expansionEl.addEventListener("click", () => {
+            activeCatalogExpansionId = expansionId;
+            renderCatalogExpansionDetail(expansionId);
+            scrollMainToTop();
+        });
+        catalogExpansionsGrid.appendChild(expansionEl);
+    });
+}
+
+function renderCatalogExpansionDetail(expansionId) {
+    const cards = getCatalogExpansionCards(expansionId);
+    catalogExpansionListView.style.display = "none";
+    catalogExpansionDetailView.style.display = "block";
+    catalogDetailName.innerText = `${expansionId} (${cards.length} 張)`;
+    catalogDetailLogo.src = getCatalogExpansionLogoUrl(expansionId);
+    catalogDetailLogo.alt = expansionId;
+    if (btnToggleCatalogCardType) {
+        btnToggleCatalogCardType.innerText = catalogGroupByCardType ? "取消分群" : "依類型分群";
+    }
+
+    if (!cards.length) {
+        catalogCardsGrid.innerHTML = `
+            <div class="catalog-empty-state">
+                <strong>${expansionId} 目前沒有卡片資料</strong>
+                <span>請確認 ptcg_card_catalog 是否已匯入最新版。</span>
+            </div>
+        `;
+        return;
+    }
+
+    catalogCardsGrid.innerHTML = "";
+    if (catalogGroupByCardType) {
+        const groupedCards = new Map();
+        cards.forEach(card => {
+            const typeKey = getCatalogCardTypeKey(card.cardType);
+            if (!groupedCards.has(typeKey)) groupedCards.set(typeKey, []);
+            groupedCards.get(typeKey).push(card);
+        });
+
+        const sortedGroups = Array.from(groupedCards.entries()).sort(([typeA], [typeB]) => {
+            const orderDiff = getCatalogCardTypeSortIndex(typeA) - getCatalogCardTypeSortIndex(typeB);
+            if (orderDiff !== 0) return orderDiff;
+            return getCatalogCardTypeLabel(typeA).localeCompare(getCatalogCardTypeLabel(typeB), "zh-Hant");
+        });
+
+        sortedGroups.forEach(([typeKey, groupCards]) => {
+            const label = getCatalogCardTypeLabel(typeKey);
+            const isCollapsed = catalogCollapsedTypeGroups.has(typeKey);
+            const groupEl = document.createElement("section");
+            groupEl.className = `catalog-card-type-group ${isCollapsed ? "collapsed" : ""}`;
+            groupEl.innerHTML = `
+                <button class="catalog-card-type-heading" type="button" aria-expanded="${!isCollapsed}">
+                    <span class="catalog-card-type-title">${label}</span>
+                    <span class="catalog-card-type-count">${groupCards.length}</span>
+                    <span class="catalog-card-type-indicator" aria-hidden="true"></span>
+                </button>
+                <div class="catalog-card-type-grid"></div>
+            `;
+            const groupGrid = groupEl.querySelector(".catalog-card-type-grid");
+            groupCards.forEach(card => groupGrid.appendChild(createCatalogCardElement(card)));
+            groupEl.querySelector(".catalog-card-type-heading").addEventListener("click", () => {
+                const collapsed = groupEl.classList.toggle("collapsed");
+                groupEl.querySelector(".catalog-card-type-heading").setAttribute("aria-expanded", String(!collapsed));
+                if (collapsed) catalogCollapsedTypeGroups.add(typeKey);
+                else catalogCollapsedTypeGroups.delete(typeKey);
+            });
+            catalogCardsGrid.appendChild(groupEl);
+        });
+        return;
+    }
+
+    cards.forEach(card => {
+        catalogCardsGrid.appendChild(createCatalogCardElement(card));
+    });
+}
+
+function createCatalogCardElement(card) {
+        const cardEl = document.createElement("div");
+        cardEl.className = "catalog-card";
+        const displayImg = card.imageUrl || "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
+        cardEl.innerHTML = `
+            <div class="catalog-card-image-wrap">
+                <img src="${displayImg}" alt="${card.name || card.id || ''}" onerror="this.src='https://placehold.co/150x210/eaeaea/999999?text=Error'">
+            </div>
+            <div class="catalog-card-info">
+                <strong>${card.name || "(未命名)"}</strong>
+                <span>${card.id || "(無編號)"}</span>
+            </div>
+        `;
+        cardEl.addEventListener("click", () => {
+            document.getElementById("lightbox-img").src = displayImg;
+            document.getElementById("lightbox-modal").classList.add("show");
+        });
+        return cardEl;
+}
+
+btnBackCatalogExpansions?.addEventListener("click", () => {
+    activeCatalogExpansionId = null;
+    catalogGroupByCardType = false;
+    renderCardCatalog();
+    scrollMainToTop();
+});
+
+btnToggleCatalogCardType?.addEventListener("click", () => {
+    catalogGroupByCardType = !catalogGroupByCardType;
+    if (activeCatalogExpansionId) renderCatalogExpansionDetail(activeCatalogExpansionId);
+});
+
+catalogSeriesTabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+        catalogSeriesTabs.forEach(item => item.classList.remove("active"));
+        tab.classList.add("active");
+        activeCatalogSeries = tab.dataset.series || "B";
+        activeCatalogExpansionId = null;
+        catalogGroupByCardType = false;
+        renderCardCatalog();
+    });
+});
 
 function renderAllViews() {
     if (currentSection === "alt_acc") renderAltAccRows();
@@ -1107,6 +1387,7 @@ function renderAllViews() {
     else if (currentSection === "needed_cards") renderNeededCardsRows();
     else if (currentSection === "general_cards") renderGeneralCardsRows();
     else if (currentSection === "two_star_cards") renderTwoStarCardsRows();
+    else if (currentSection === "card_catalog") renderCardCatalog();
     else if (currentSection === "meta_decks") {
         if (activeMetaDeckId) {
             renderMetaDeckDetail();
@@ -1128,7 +1409,7 @@ function makeRarityBlockCollapsible(rowBlock) {
 
     const indicator = document.createElement("span");
     indicator.className = "toggle-row-indicator";
-    indicator.textContent = "⌄";
+    indicator.setAttribute("aria-hidden", "true");
     header.appendChild(indicator);
 
     rowBlock.appendChild(content);
@@ -3176,7 +3457,9 @@ deckCardForm.addEventListener("submit", async (e) => {
     if (deck) {
         const newCard = {
             name: document.getElementById("deck-card-name").value.trim(),
+            id: document.getElementById("deck-card-id").value.trim(),
             img: document.getElementById("deck-card-img").value.trim(),
+            rarity: document.getElementById("deck-card-rarity").value.trim(),
             type: getDeckCardType(document.getElementById("deck-card-type").value),
             qty: getDeckCardQuantity(),
             bgColor: deckColorInput?.value || "#ffffff"
@@ -3417,6 +3700,8 @@ function renderDeckCardAutocomplete(filterText = "") {
 
         itemDiv.addEventListener("click", () => {
             deckCardNameInput.value = name;
+            document.getElementById("deck-card-id").value = dictData.id || "";
+            document.getElementById("deck-card-rarity").value = dictData.rarity || "";
             document.getElementById("deck-card-img").value = dictData.imageUrl || "";
             deckAutocompleteList.classList.remove('show');
             
@@ -3428,7 +3713,11 @@ function renderDeckCardAutocomplete(filterText = "") {
     deckAutocompleteList.classList.add('show');
 }
 
-deckCardNameInput.addEventListener("input", (e) => renderDeckCardAutocomplete(e.target.value.trim()));
+deckCardNameInput.addEventListener("input", (e) => {
+    document.getElementById("deck-card-id").value = "";
+    document.getElementById("deck-card-rarity").value = "";
+    renderDeckCardAutocomplete(e.target.value.trim());
+});
 deckCardNameInput.addEventListener("focus", (e) => renderDeckCardAutocomplete(e.target.value.trim()));
 
 const deckCoverNameInput = document.getElementById("deck-cover-name");
@@ -3622,8 +3911,6 @@ function showFirestoreLoadError(error) {
 }
 
 onSnapshot(cardsCollection, (snapshot) => {
-    uniqueCardsDict = {};
-
     const rawCards = snapshot.docs.map(doc => {
         const data = doc.data();
         const section = data.section || "alt_acc";
@@ -3666,26 +3953,6 @@ onSnapshot(cardsCollection, (snapshot) => {
             if (!twoStarData.quantity) twoStarData.quantity = altAccData?.quantity || 1;
         }
 
-        addUniqueCardToDict(data);
-
-        if (section === "meta_deck" && data.deckData) {
-            const deckCards = Array.isArray(data.deckData.cards) ? data.deckData.cards : [];
-            deckCards.forEach(card => addUniqueCardToDict(card));
-
-            const deckTabs = Array.isArray(data.deckData.tabs) ? data.deckData.tabs : [];
-            deckTabs.forEach(tab => {
-                if (tab.coverCard) addUniqueCardToDict({ name: tab.coverCard.name, img: tab.coverCard.img || tab.coverImg });
-                if (tab.coverName || tab.coverImg) addUniqueCardToDict({ name: tab.coverName, img: tab.coverImg });
-                if (Array.isArray(tab.cards)) tab.cards.forEach(card => addUniqueCardToDict(card));
-                if (Array.isArray(tab.replacements)) {
-                    tab.replacements.forEach(group => {
-                        getReplacementSources(group).forEach(card => addUniqueCardToDict(card));
-                        if (Array.isArray(group.alternatives)) group.alternatives.forEach(card => addUniqueCardToDict(card));
-                    });
-                }
-            });
-        }
-
         return { docId: doc.id, ...data, section, altAccData, challenge24hData, neededCardsData, generalData, twoStarData };
     });
 
@@ -3712,5 +3979,14 @@ onSnapshot(cardsCollection, (snapshot) => {
         return c;
     });
     
+    rebuildUniqueCardsDict(cardsData);
     renderAllViews();
 }, showFirestoreLoadError);
+
+onSnapshot(cardCatalogCollection, (snapshot) => {
+    catalogCardsData = snapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
+    rebuildUniqueCardsDict(cardsData);
+    if (currentSection === "card_catalog") renderCardCatalog();
+}, error => {
+    console.error("官方卡池資料載入失敗：", error);
+});

@@ -57,6 +57,10 @@
 
             <section id="view-card-catalog" class="content-section" style="display: none;">
                 <div id="catalog-expansion-list-view">
+                    <div class="catalog-search-bar">
+                        <input id="catalog-global-search" type="search" placeholder="搜尋所有擴充包卡片">
+                        <div id="catalog-global-filters" class="catalog-filter-panel"></div>
+                    </div>
                     <div class="account-tabs catalog-series-tabs">
                         <button class="tab-btn catalog-series-tab-btn active" data-series="B">B系列</button>
                         <button class="tab-btn catalog-series-tab-btn" data-series="A">A系列</button>
@@ -72,6 +76,10 @@
                             <h2 id="catalog-detail-name"></h2>
                         </div>
                         <button id="btn-toggle-catalog-cardtype" class="btn-secondary">依類型分群</button>
+                    </div>
+                    <div class="catalog-search-bar catalog-detail-search-bar">
+                        <input id="catalog-detail-search" type="search" placeholder="搜尋此擴充包卡片">
+                        <div id="catalog-detail-filters" class="catalog-filter-panel"></div>
                     </div>
                     <div id="catalog-cards-grid" class="catalog-cards-grid"></div>
                 </div>

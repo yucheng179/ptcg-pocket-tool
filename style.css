@@ -107,6 +107,90 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     gap: 18px;
 }
 
+.catalog-expansions-grid.catalog-search-results {
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    gap: 22px;
+}
+
+.catalog-search-bar {
+    margin: 0 0 22px;
+}
+
+.catalog-detail-search-bar {
+    margin-top: -6px;
+}
+
+.catalog-search-bar input {
+    width: 100%;
+    max-width: 520px;
+    height: 44px;
+    border: 1px solid #cfd8e3;
+    border-radius: 8px;
+    padding: 0 14px;
+    font-size: 16px;
+    background: #fff;
+    color: #172534;
+    outline: none;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.catalog-search-bar input:focus {
+    border-color: #0b83ff;
+    box-shadow: 0 0 0 3px rgba(11, 131, 255, 0.12);
+}
+
+.catalog-filter-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.catalog-filter-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.catalog-filter-label {
+    flex: 0 0 76px;
+    color: #4d5c6c;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 34px;
+}
+
+.catalog-filter-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.catalog-filter-chip {
+    border: 1px solid #d8e1ec;
+    background: #f5f8fb;
+    color: #435264;
+    border-radius: 999px;
+    min-height: 34px;
+    padding: 6px 13px;
+    font-size: 14px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.catalog-filter-chip:hover {
+    border-color: #9dcaff;
+    color: #0b83ff;
+}
+
+.catalog-filter-chip.active {
+    background: #e6f2ff;
+    border-color: #0b83ff;
+    color: #007aff;
+    box-shadow: 0 0 0 3px rgba(11, 131, 255, 0.1);
+}
+
 .catalog-expansion-card {
     border: 1px solid #e5eaf0;
     background: #fff;
@@ -430,23 +514,6 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 }
 .toggle-row-block.collapsed .toggle-row-indicator {
     transform: translateY(-50%) rotate(-90deg);
-}
-
-#rarity-rows-general-container .toggle-row-block .rarity-header {
-    flex-direction: row;
-    justify-content: flex-start;
-    min-height: 56px;
-    padding: 8px 58px 8px 0;
-}
-
-#rarity-rows-general-container .toggle-row-block .rarity-header img {
-    display: none;
-}
-
-#rarity-rows-general-container .toggle-row-block .rarity-header span {
-    color: #153044;
-    font-size: 20px;
-    font-weight: 800;
 }
 .status-row { display: flex; margin-bottom: 15px; padding: 15px 10px; border-radius: 10px; min-height: 120px; }
 .status-row:last-child { margin-bottom: 0; }

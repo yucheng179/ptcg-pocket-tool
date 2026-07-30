@@ -22,6 +22,12 @@ let activeCatalogExpansionId = null;
 let activeCatalogSeries = "B";
 let catalogGroupByCardType = false;
 let catalogCollapsedTypeGroups = new Set();
+let catalogGlobalSearchQuery = "";
+let catalogDetailSearchQuery = "";
+let catalogSelectedTypeFilters = new Set();
+let catalogSelectedRarityFilters = new Set();
+let cardAutocompleteContext = null;
+let deckCardAutocompleteContext = null;
 
 let currentSection = "alt_acc"; 
 let currentAccountTab = "小帳";
@@ -113,6 +119,7 @@ const generalTagColors = [
     { name: "紅色", value: "#d44c47", bg: "#ffe2dd" }
 ];
 const GENERAL_TAG_ORDER_STORAGE_KEY = "ptcg-general-tag-order";
+const AUTOCOMPLETE_MAX_MATCHES = 120;
 
 const tierWeights = { "SS": 8, "S": 7, "A": 6, "B": 5, "C": 4, "D": 3, "E": 2, "無": 1 };
 const deckRowTypes = [
@@ -240,6 +247,66 @@ function isSameAutocompleteCard(existing, normalizedImageUrl, normalizedId) {
     return hasSameId || hasSameImage;
 }
 
+function getGeneralTypeCatalogKeys(typeName = "") {
+    const normalized = String(typeName || "").trim();
+    if (normalized === "寶可夢") return ["pokemon"];
+    if (normalized === "支援者") return ["support"];
+    if (normalized === "物品") return ["item"];
+    if (normalized === "道具") return ["pokemonTool"];
+    if (normalized === "競技場") return ["stadium"];
+    if (normalized === "物品、道具、競技場" || normalized === "物品與道具") return ["item", "pokemonTool", "stadium"];
+    return [];
+}
+
+function getAutocompleteCardTypeKey(card = {}) {
+    if (card.cardType) return getCatalogCardTypeKey(card.cardType);
+    const typeName = card.generalData?.type || card.type || card.twoStarData?.type || "";
+    const mappedTypes = getGeneralTypeCatalogKeys(typeName);
+    return mappedTypes.length === 1 ? getCatalogCardTypeKey(mappedTypes[0]) : "";
+}
+
+function getAutocompleteContextForCardForm(rarityName = null, typeName = null) {
+    if (["alt_acc", "24h", "needed_cards", "two_star_cards"].includes(currentSection) && rarityName) {
+        return { rarities: [rarityName] };
+    }
+    if (currentSection === "general_cards" && typeName) {
+        const cardTypes = getGeneralTypeCatalogKeys(typeName).map(type => getCatalogCardTypeKey(type));
+        return cardTypes.length ? { cardTypes } : null;
+    }
+    return null;
+}
+
+function getAutocompleteContextForExistingCard(card = {}) {
+    if (card.section === "general_cards") {
+        const cardTypes = getGeneralTypeCatalogKeys(card.generalData?.type).map(type => getCatalogCardTypeKey(type));
+        return cardTypes.length ? { cardTypes } : null;
+    }
+    if (["alt_acc", "24h", "needed_cards", "two_star_cards"].includes(card.section) && card.rarity) {
+        return { rarities: [card.rarity] };
+    }
+    return null;
+}
+
+function getDeckRowCatalogTypeKeys(rowType = "") {
+    return getGeneralTypeCatalogKeys(getDeckCardType(rowType)).map(type => getCatalogCardTypeKey(type));
+}
+
+function autocompleteCardMatchesContext(card = {}, context = null) {
+    if (!context) return true;
+
+    if (Array.isArray(context.rarities) && context.rarities.length) {
+        const rarity = String(card.rarity || "").trim();
+        if (!context.rarities.includes(rarity)) return false;
+    }
+
+    if (Array.isArray(context.cardTypes) && context.cardTypes.length) {
+        const cardType = getAutocompleteCardTypeKey(card);
+        if (!cardType || !context.cardTypes.includes(cardType)) return false;
+    }
+
+    return true;
+}
+
 function addUniqueCardToDict(card = {}) {
     const name = (card.name || "").normalize("NFKC").replace(/[\u200B-\u200D\uFEFF]/g, "").replace(/\s+/g, " ").trim();
     const normalizedName = normalizeCardName(name);
@@ -250,6 +317,8 @@ function addUniqueCardToDict(card = {}) {
     const id = (card.id || "").trim();
     const normalizedId = normalizeCardId(id);
     const rarity = card.rarity || "1星";
+    const sourceRarity = card.sourceRarity || "";
+    const cardType = getAutocompleteCardTypeKey(card);
     const bgColor = card.bgColor || "#ffffff";
 
     if (!uniqueCardsDict[normalizedName]) {
@@ -260,7 +329,7 @@ function addUniqueCardToDict(card = {}) {
         isSameAutocompleteCard(item, normalizedImageUrl, normalizedId)
     );
     if (!existing) {
-        uniqueCardsDict[normalizedName].push({ name, id, normalizedId, imageUrl, normalizedImageUrl, rarity, bgColor });
+        uniqueCardsDict[normalizedName].push({ name, id, normalizedId, imageUrl, normalizedImageUrl, rarity, sourceRarity, cardType, bgColor });
         return;
     }
 
@@ -271,16 +340,29 @@ function addUniqueCardToDict(card = {}) {
         existing.normalizedId = normalizedId;
     }
     if (!existing.rarity && rarity) existing.rarity = rarity;
+    if (!existing.sourceRarity && sourceRarity) existing.sourceRarity = sourceRarity;
+    if (!existing.cardType && cardType) existing.cardType = cardType;
     if ((!existing.bgColor || existing.bgColor === "#ffffff") && bgColor) {
         existing.bgColor = bgColor;
     }
 }
 
-function getAutocompleteMatches(filterText = "") {
+function getAutocompleteMatches(filterText = "", context = null, limit = AUTOCOMPLETE_MAX_MATCHES) {
     const normalizedFilter = normalizeCardName(filterText);
-    return Object.entries(uniqueCardsDict)
-        .filter(([normalizedName]) => normalizedName.includes(normalizedFilter))
-        .flatMap(([, variants]) => variants.map((data, variantIndex) => ({ name: data.name, data, variantIndex })));
+    const matches = [];
+
+    for (const [normalizedName, variants] of Object.entries(uniqueCardsDict)) {
+        if (!normalizedName.includes(normalizedFilter)) continue;
+
+        for (let variantIndex = 0; variantIndex < variants.length; variantIndex += 1) {
+            const data = variants[variantIndex];
+            if (!autocompleteCardMatchesContext(data, context)) continue;
+            matches.push({ name: data.name, data, variantIndex });
+            if (matches.length >= limit) return matches;
+        }
+    }
+
+    return matches;
 }
 
 function addCardRecordToAutocompleteDict(card = {}) {
@@ -921,6 +1003,8 @@ async function saveDeckTabs(deck, tabs) {
 function openDeckCardModal(rowType, card = null, index = null) {
     deckCardForm.reset();
     editingDeckCardIndex = index;
+    const deckCardTypes = getDeckRowCatalogTypeKeys(card?.type || rowType);
+    deckCardAutocompleteContext = deckCardTypes.length ? { cardTypes: deckCardTypes } : null;
     document.querySelector("#deck-card-form-modal h2").innerText = index === null ? "➕ 放入卡牌至牌組" : "✏️ 編輯牌組卡片";
     deckCardForm.querySelector('button[type="submit"]').innerText = index === null ? "加入牌組" : "儲存卡片";
     document.getElementById("deck-card-name").value = card?.name || "";
@@ -1051,6 +1135,10 @@ const catalogDetailName = document.getElementById("catalog-detail-name");
 const btnBackCatalogExpansions = document.getElementById("btn-back-catalog-expansions");
 const btnToggleCatalogCardType = document.getElementById("btn-toggle-catalog-cardtype");
 const catalogSeriesTabs = document.querySelectorAll(".catalog-series-tab-btn");
+const catalogGlobalSearchInput = document.getElementById("catalog-global-search");
+const catalogDetailSearchInput = document.getElementById("catalog-detail-search");
+const catalogGlobalFilters = document.getElementById("catalog-global-filters");
+const catalogDetailFilters = document.getElementById("catalog-detail-filters");
 
 const formModal = document.getElementById("form-modal");
 const cardForm = document.getElementById("card-form");
@@ -1145,6 +1233,12 @@ function switchSection(sectionName, titleText, navEl, viewEl) {
         activeCatalogSeries = "B";
         activeCatalogExpansionId = null;
         catalogGroupByCardType = false;
+        catalogGlobalSearchQuery = "";
+        catalogDetailSearchQuery = "";
+        catalogSelectedTypeFilters.clear();
+        catalogSelectedRarityFilters.clear();
+        if (catalogGlobalSearchInput) catalogGlobalSearchInput.value = "";
+        if (catalogDetailSearchInput) catalogDetailSearchInput.value = "";
         catalogSeriesTabs.forEach(tab => tab.classList.toggle("active", tab.dataset.series === activeCatalogSeries));
         catalogExpansionListView.style.display = "block";
         catalogExpansionDetailView.style.display = "none";
@@ -1203,10 +1297,125 @@ function getCatalogCardTypeSortIndex(cardType = "") {
     return index === -1 ? order.length : index;
 }
 
+function getCatalogRarityKey(card = {}) {
+    return String(card.sourceRarity || card.rarity || "").trim();
+}
+
+function getCatalogRarityLabel(card = {}) {
+    return card.rarity || card.sourceRarity || "其他";
+}
+
+function getCatalogRaritySortIndex(rarityKey = "") {
+    const order = ["C", "U", "R", "RR", "AR", "SR", "SAR", "IM", "S", "SSR", "UR"];
+    const index = order.indexOf(rarityKey);
+    return index === -1 ? order.length : index;
+}
+
 function getCatalogExpansionCards(expansionId) {
     return catalogCardsData
         .filter(card => card.expansion === expansionId)
         .sort((a, b) => (a.id || "").localeCompare(b.id || "", "en", { numeric: true }));
+}
+
+function cardMatchesCatalogSearch(card, query) {
+    const keyword = String(query || "").trim().toLowerCase();
+    const matchesKeyword = !keyword || [
+        card.name,
+        card.id,
+        card.expansion,
+        card.rarity,
+        card.sourceRarity,
+        getCatalogCardTypeLabel(card.cardType),
+        card.cardType
+    ].some(value => String(value || "").toLowerCase().includes(keyword));
+
+    if (!matchesKeyword) return false;
+
+    const typeKey = getCatalogCardTypeKey(card.cardType);
+    if (catalogSelectedTypeFilters.size && !catalogSelectedTypeFilters.has(typeKey)) return false;
+
+    const rarityKey = getCatalogRarityKey(card);
+    if (catalogSelectedRarityFilters.size && !catalogSelectedRarityFilters.has(rarityKey)) return false;
+
+    return true;
+}
+
+function getCatalogSearchResults(query, cards = catalogCardsData) {
+    return cards
+        .filter(card => cardMatchesCatalogSearch(card, query))
+        .sort((a, b) => (a.id || "").localeCompare(b.id || "", "en", { numeric: true }));
+}
+
+function getCatalogFilterOptions() {
+    const typeMap = new Map();
+    const rarityMap = new Map();
+
+    catalogCardsData.forEach(card => {
+        const typeKey = getCatalogCardTypeKey(card.cardType);
+        typeMap.set(typeKey, getCatalogCardTypeLabel(typeKey));
+
+        const rarityKey = getCatalogRarityKey(card);
+        if (rarityKey) rarityMap.set(rarityKey, getCatalogRarityLabel(card));
+    });
+
+    const typeOptions = Array.from(typeMap.entries())
+        .map(([key, label]) => ({ key, label }))
+        .sort((a, b) => {
+            const orderDiff = getCatalogCardTypeSortIndex(a.key) - getCatalogCardTypeSortIndex(b.key);
+            if (orderDiff !== 0) return orderDiff;
+            return a.label.localeCompare(b.label, "zh-Hant");
+        });
+
+    const rarityOptions = Array.from(rarityMap.entries())
+        .map(([key, label]) => ({ key, label }))
+        .sort((a, b) => {
+            const orderDiff = getCatalogRaritySortIndex(a.key) - getCatalogRaritySortIndex(b.key);
+            if (orderDiff !== 0) return orderDiff;
+            return a.label.localeCompare(b.label, "zh-Hant", { numeric: true });
+        });
+
+    return { typeOptions, rarityOptions };
+}
+
+function toggleCatalogFilter(filterSet, key) {
+    if (filterSet.has(key)) filterSet.delete(key);
+    else filterSet.add(key);
+    renderCatalogFilters();
+    renderCardCatalog();
+}
+
+function renderCatalogFilterGroup(title, options, selectedSet, type) {
+    if (!options.length) return "";
+    const chips = options.map(option => `
+        <button class="catalog-filter-chip ${selectedSet.has(option.key) ? "active" : ""}" type="button" data-filter-type="${type}" data-filter-key="${option.key}">
+            ${option.label}
+        </button>
+    `).join("");
+    return `
+        <div class="catalog-filter-row">
+            <span class="catalog-filter-label">${title}</span>
+            <div class="catalog-filter-options">${chips}</div>
+        </div>
+    `;
+}
+
+function renderCatalogFilters() {
+    const { typeOptions, rarityOptions } = getCatalogFilterOptions();
+    const filterHtml = [
+        renderCatalogFilterGroup("卡片種類", typeOptions, catalogSelectedTypeFilters, "type"),
+        renderCatalogFilterGroup("稀有度", rarityOptions, catalogSelectedRarityFilters, "rarity")
+    ].join("");
+
+    [catalogGlobalFilters, catalogDetailFilters].forEach(panel => {
+        if (!panel) return;
+        panel.innerHTML = filterHtml;
+        panel.querySelectorAll(".catalog-filter-chip").forEach(button => {
+            button.addEventListener("click", () => {
+                const targetSet = button.dataset.filterType === "rarity" ? catalogSelectedRarityFilters : catalogSelectedTypeFilters;
+                toggleCatalogFilter(targetSet, button.dataset.filterKey || "");
+            });
+        });
+    });
 }
 
 function getVisibleCatalogExpansionIds() {
@@ -1227,6 +1436,7 @@ function getVisibleCatalogExpansionIds() {
 
 function renderCardCatalog() {
     if (!catalogExpansionListView || !catalogExpansionDetailView) return;
+    renderCatalogFilters();
 
     if (activeCatalogExpansionId) {
         renderCatalogExpansionDetail(activeCatalogExpansionId);
@@ -1246,7 +1456,25 @@ function renderCardCatalog() {
         return;
     }
 
+    const hasGlobalSearch = Boolean(catalogGlobalSearchQuery || catalogSelectedTypeFilters.size || catalogSelectedRarityFilters.size);
     catalogExpansionsGrid.innerHTML = "";
+    catalogExpansionsGrid.classList.toggle("catalog-search-results", hasGlobalSearch);
+
+    if (hasGlobalSearch) {
+        const results = getCatalogSearchResults(catalogGlobalSearchQuery);
+        if (!results.length) {
+            catalogExpansionsGrid.innerHTML = `
+                <div class="catalog-empty-state">
+                    <strong>找不到符合的卡片</strong>
+                    <span>請試試其他名稱、編號或版本。</span>
+                </div>
+            `;
+            return;
+        }
+        results.forEach(card => catalogExpansionsGrid.appendChild(createCatalogCardElement(card, { showExpansion: true })));
+        return;
+    }
+
     getVisibleCatalogExpansionIds().forEach(expansionId => {
         const cards = getCatalogExpansionCards(expansionId);
         const expansionEl = document.createElement("button");
@@ -1264,6 +1492,8 @@ function renderCardCatalog() {
         `;
         expansionEl.addEventListener("click", () => {
             activeCatalogExpansionId = expansionId;
+            catalogDetailSearchQuery = "";
+            if (catalogDetailSearchInput) catalogDetailSearchInput.value = "";
             renderCatalogExpansionDetail(expansionId);
             scrollMainToTop();
         });
@@ -1273,9 +1503,11 @@ function renderCardCatalog() {
 
 function renderCatalogExpansionDetail(expansionId) {
     const cards = getCatalogExpansionCards(expansionId);
+    const displayCards = getCatalogSearchResults(catalogDetailSearchQuery, cards);
+    const hasDetailSearch = Boolean(catalogDetailSearchQuery || catalogSelectedTypeFilters.size || catalogSelectedRarityFilters.size);
     catalogExpansionListView.style.display = "none";
     catalogExpansionDetailView.style.display = "block";
-    catalogDetailName.innerText = `${expansionId} (${cards.length} 張)`;
+    catalogDetailName.innerText = hasDetailSearch ? `${expansionId} (${displayCards.length}/${cards.length} 張)` : `${expansionId} (${cards.length} 張)`;
     catalogDetailLogo.src = getCatalogExpansionLogoUrl(expansionId);
     catalogDetailLogo.alt = expansionId;
     if (btnToggleCatalogCardType) {
@@ -1293,9 +1525,19 @@ function renderCatalogExpansionDetail(expansionId) {
     }
 
     catalogCardsGrid.innerHTML = "";
+    if (hasDetailSearch && !displayCards.length) {
+        catalogCardsGrid.innerHTML = `
+            <div class="catalog-empty-state">
+                <strong>此擴充包找不到符合的卡片</strong>
+                <span>請試試其他名稱或編號。</span>
+            </div>
+        `;
+        return;
+    }
+
     if (catalogGroupByCardType) {
         const groupedCards = new Map();
-        cards.forEach(card => {
+        displayCards.forEach(card => {
             const typeKey = getCatalogCardTypeKey(card.cardType);
             if (!groupedCards.has(typeKey)) groupedCards.set(typeKey, []);
             groupedCards.get(typeKey).push(card);
@@ -1333,22 +1575,23 @@ function renderCatalogExpansionDetail(expansionId) {
         return;
     }
 
-    cards.forEach(card => {
+    displayCards.forEach(card => {
         catalogCardsGrid.appendChild(createCatalogCardElement(card));
     });
 }
 
-function createCatalogCardElement(card) {
+function createCatalogCardElement(card, options = {}) {
         const cardEl = document.createElement("div");
         cardEl.className = "catalog-card";
         const displayImg = card.imageUrl || "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
+        const subText = card.id || "(無編號)";
         cardEl.innerHTML = `
             <div class="catalog-card-image-wrap">
                 <img src="${displayImg}" alt="${card.name || card.id || ''}" onerror="this.src='https://placehold.co/150x210/eaeaea/999999?text=Error'">
             </div>
             <div class="catalog-card-info">
                 <strong>${card.name || "(未命名)"}</strong>
-                <span>${card.id || "(無編號)"}</span>
+                <span>${subText}</span>
             </div>
         `;
         cardEl.addEventListener("click", () => {
@@ -1360,6 +1603,8 @@ function createCatalogCardElement(card) {
 
 btnBackCatalogExpansions?.addEventListener("click", () => {
     activeCatalogExpansionId = null;
+    catalogDetailSearchQuery = "";
+    if (catalogDetailSearchInput) catalogDetailSearchInput.value = "";
     catalogGroupByCardType = false;
     renderCardCatalog();
     scrollMainToTop();
@@ -1377,8 +1622,22 @@ catalogSeriesTabs.forEach(tab => {
         activeCatalogSeries = tab.dataset.series || "B";
         activeCatalogExpansionId = null;
         catalogGroupByCardType = false;
+        catalogGlobalSearchQuery = "";
+        catalogSelectedTypeFilters.clear();
+        catalogSelectedRarityFilters.clear();
+        if (catalogGlobalSearchInput) catalogGlobalSearchInput.value = "";
         renderCardCatalog();
     });
+});
+
+catalogGlobalSearchInput?.addEventListener("input", (event) => {
+    catalogGlobalSearchQuery = event.target.value.trim();
+    renderCardCatalog();
+});
+
+catalogDetailSearchInput?.addEventListener("input", (event) => {
+    catalogDetailSearchQuery = event.target.value.trim();
+    if (activeCatalogExpansionId) renderCatalogExpansionDetail(activeCatalogExpansionId);
 });
 
 function renderAllViews() {
@@ -3194,6 +3453,7 @@ cardForm.addEventListener("keydown", (event) => {
 
 function openNewModal(rarityName, typeName = null, hasMainVal = null) {
     editingCardDocId = null; 
+    cardAutocompleteContext = getAutocompleteContextForCardForm(rarityName, typeName);
     modalTitle.innerText = "➕ 新增卡片資料";
     cardForm.reset(); 
     setupModalFields();
@@ -3234,6 +3494,7 @@ function openEditModal(docId) {
     const card = cardsData.find(c => c.docId === docId);
     if (card) {
         editingCardDocId = docId; 
+        cardAutocompleteContext = getAutocompleteContextForExistingCard(card);
         modalTitle.innerText = "✏️ 編輯卡片資料"; 
         
         document.getElementById("card-name").value = card.name || "";
@@ -3615,7 +3876,7 @@ const autocompleteList = document.getElementById("custom-autocomplete-list");
 
 function renderAutocomplete(filterText = "") {
     autocompleteList.innerHTML = "";
-    const matchedCards = getAutocompleteMatches(filterText);
+    const matchedCards = getAutocompleteMatches(filterText, cardAutocompleteContext);
     
     if (matchedCards.length === 0) {
         autocompleteList.classList.remove('show');
@@ -3676,7 +3937,7 @@ const deckAutocompleteList = document.getElementById("deck-autocomplete-list");
 
 function renderDeckCardAutocomplete(filterText = "") {
     deckAutocompleteList.innerHTML = "";
-    const matchedCards = getAutocompleteMatches(filterText);
+    const matchedCards = getAutocompleteMatches(filterText, deckCardAutocompleteContext);
     
     if (matchedCards.length === 0) {
         deckAutocompleteList.classList.remove('show');

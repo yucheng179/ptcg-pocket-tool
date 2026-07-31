@@ -792,6 +792,35 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .challenge-24h-tabs {
     margin-bottom: 22px;
 }
+.challenge-24h-tabs .deck-tab-btn {
+    min-width: 80px;
+    justify-content: center;
+    padding-left: 20px;
+    padding-right: 20px;
+}
+.challenge-24h-import-tools {
+    margin-left: auto;
+    margin-bottom: 5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+.challenge-24h-import-select {
+    min-width: 120px;
+    height: 36px;
+    border: 1px solid #cfd8e3;
+    border-radius: 6px;
+    background: #fff;
+    color: #223142;
+    padding: 0 10px;
+    font-size: 14px;
+    font-weight: 700;
+}
+.challenge-24h-import-btn {
+    min-height: 36px;
+    padding: 8px 14px;
+    white-space: nowrap;
+}
 .rarity-count { display: inline-block; background-color: #f0f0f0; color: #888; font-size: 14px; font-weight: normal; padding: 2px 8px; border-radius: 12px; margin-left: 8px; vertical-align: middle; }
 
 .qty-control { display: flex; justify-content: center; align-items: center; gap: 12px; margin-top: 8px; padding-top: 6px; border-top: 1px dashed #ccc; }
@@ -1015,6 +1044,34 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     gap: 30px;
     align-items: flex-start;
 }
+.deck-detail-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+.deck-import-textarea {
+    width: 100%;
+    min-height: 280px;
+    resize: vertical;
+    border: 1px solid #cfd8e3;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 14px;
+    line-height: 1.5;
+    outline: none;
+}
+.deck-import-textarea:focus {
+    border-color: #0b83ff;
+    box-shadow: 0 0 0 3px rgba(11, 131, 255, 0.12);
+}
+.deck-import-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #334155;
+    font-weight: 700;
+}
 .deck-detail-left {
     width: 300px;
     flex-shrink: 0;
@@ -1121,7 +1178,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     margin-bottom: 28px;
 }
 .meta-lobby-tabs .deck-tab-btn {
-    min-width: 90px;
+    min-width: 80px;
     justify-content: center;
     padding-left: 22px;
     padding-right: 22px;

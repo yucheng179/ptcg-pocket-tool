@@ -28,6 +28,7 @@ let catalogSelectedTypeFilters = new Set();
 let catalogSelectedRarityFilters = new Set();
 let cardAutocompleteContext = null;
 let deckCardAutocompleteContext = null;
+const collapsedRarityBlocks = new Set();
 
 let currentSection = "alt_acc"; 
 let currentAccountTab = "小帳";
@@ -52,6 +53,7 @@ const AUTO_TEAM_LOBBY_TAB_ID = "auto-team";
 const DEFAULT_24H_VERSION_TAB_ID = "b4";
 let active24hVersionTabId = DEFAULT_24H_VERSION_TAB_ID;
 let challenge24hTabClickTimer = null;
+let draggedChallenge24hTabId = null;
 
 // --- 常數定義 ---
 const catalogExpansionIds = [
@@ -76,6 +78,7 @@ const rarities24h = [
     { name: "1星", icon: "https://img.game8.co/3994721/895579e1516f605b7882b0909f329b7e.png/show" },
     { name: "2星", icon: "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show" }
 ];
+const challenge24hImportRarities = new Set(rarities24h.map(rarity => rarity.name));
 
 const raritiesNeededMissing = [
     { name: "2菱", icon: "https://img.game8.co/3995615/ef7758a60d9c9d1871eca629c203b81e.png/show" },
@@ -128,11 +131,11 @@ const deckRowTypes = [
     { key: "物品、道具、競技場", label: "物品、道具、競技場", aliases: ["物品、道具、競技場", "物品與道具"] }
 ];
 const defaultNewDeckCards = [
-    { name: "博士的研究", type: "支援者", qty: 2 },
-    { name: "娜姿", type: "支援者", qty: 1 },
-    { name: "赤日", type: "支援者", qty: 1 },
-    { name: "模仿少女", type: "支援者", qty: 1 },
-    { name: "精靈球", type: "物品、道具、競技場", qty: 2 }
+    { name: "博士的研究", id: "A4b-373", type: "支援者", qty: 2 },
+    { name: "娜姿", id: "A1-272", type: "支援者", qty: 1 },
+    { name: "赤日", id: "A2-190", type: "支援者", qty: 1 },
+    { name: "模仿少女", id: "B1-270", type: "支援者", qty: 1 },
+    { name: "精靈球", id: "PROMO-A-005", type: "物品、道具、競技場", qty: 2 }
 ];
 const deckAttributeMeta = {
     "草": { icon: "https://img.game8.co/4018726/c2d96eaebb6cd06d6a53dfd48da5341c.png/show", className: "attr-grass" },
@@ -370,6 +373,13 @@ function addCardRecordToAutocompleteDict(card = {}) {
 
     if (card.section !== "meta_deck" || !card.deckData) return;
 
+    if (card.deckData.coverCard) {
+        addUniqueCardToDict({ name: card.deckData.coverCard.name, img: card.deckData.coverCard.img || card.deckData.coverImg });
+    }
+    if (card.deckData.coverName || card.deckData.coverImg) {
+        addUniqueCardToDict({ name: card.deckData.coverName, img: card.deckData.coverImg });
+    }
+
     const deckCards = Array.isArray(card.deckData.cards) ? card.deckData.cards : [];
     deckCards.forEach(deckCard => addUniqueCardToDict(deckCard));
 
@@ -411,6 +421,19 @@ function getChallenge24hCardVersionTabId(card) {
 
 function getChallenge24hVersionTabName(tabId = active24hVersionTabId) {
     return getChallenge24hVersionTabs().find(tab => tab.id === tabId)?.name || "B4";
+}
+
+function getChallenge24hImportExpansionOptions() {
+    const existingIds = Array.from(new Set(catalogCardsData.map(card => card.expansion).filter(Boolean)));
+    return existingIds.sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
+}
+
+function getDefaultChallenge24hImportExpansion() {
+    const options = getChallenge24hImportExpansionOptions();
+    const activeTabName = getChallenge24hVersionTabName();
+    return options.find(id => activeTabName.toLowerCase().startsWith(id.toLowerCase()))
+        || options[0]
+        || "";
 }
 
 async function saveChallenge24hVersionTabs(tabs) {
@@ -813,6 +836,87 @@ function getDeckCardType(cardType) {
     return deckRowTypes.find(row => row.aliases.includes(cardType))?.key || cardType || "寶可夢";
 }
 
+function getDeckCardTypeFromCatalogCard(card = {}) {
+    const cardType = getCatalogCardTypeKey(card.cardType);
+    if (cardType === "pokemon") return "寶可夢";
+    if (cardType === "support") return "支援者";
+    if (["item", "pokemontool", "stadium"].includes(cardType)) return "物品、道具、競技場";
+    return getDeckCardType(card.cardType || "寶可夢");
+}
+
+function normalizeDeckImportExpansion(expansion = "") {
+    const value = String(expansion || "").trim();
+    const promoMatch = value.match(/^P-?([A-Z])$/i);
+    if (promoMatch) return `PROMO-${promoMatch[1].toUpperCase()}`;
+    return value;
+}
+
+function buildDeckImportCardId(expansion = "", number = "") {
+    const normalizedExpansion = normalizeDeckImportExpansion(expansion);
+    const normalizedNumber = String(number || "").trim().padStart(3, "0");
+    return `${normalizedExpansion}-${normalizedNumber}`;
+}
+
+function findCatalogCardForDeckImport(expansion = "", number = "", englishName = "") {
+    const targetId = normalizeCardId(buildDeckImportCardId(expansion, number));
+    const idMatch = catalogCardsData.find(card => normalizeCardId(card.id) === targetId);
+    if (idMatch) return idMatch;
+
+    const fallbackName = normalizeCardName(englishName);
+    if (!fallbackName) return null;
+    return catalogCardsData.find(card => normalizeCardName(card.name).includes(fallbackName)) || null;
+}
+
+function parseDeckImportLine(line = "") {
+    const trimmed = line.trim();
+    if (!trimmed || /^energy\s*:/i.test(trimmed)) return null;
+
+    const parts = trimmed.split(/\s+/);
+    if (parts.length < 4) return { error: "格式不足", raw: line };
+
+    const qty = Number(parts[0]);
+    const number = parts.at(-1);
+    const expansion = parts.at(-2);
+    const englishName = parts.slice(1, -2).join(" ");
+
+    if (!Number.isFinite(qty) || qty <= 0) return { error: "數量錯誤", raw: line };
+    if (!/^\d+$/.test(number)) return { error: "卡號錯誤", raw: line };
+
+    return { qty, expansion, number, englishName, raw: line };
+}
+
+function parseDeckImportText(text = "") {
+    const importedCards = [];
+    const unmatchedLines = [];
+
+    text.split(/\r?\n/).forEach(line => {
+        const parsed = parseDeckImportLine(line);
+        if (!parsed) return;
+        if (parsed.error) {
+            unmatchedLines.push(`${parsed.raw} (${parsed.error})`);
+            return;
+        }
+
+        const catalogCard = findCatalogCardForDeckImport(parsed.expansion, parsed.number, parsed.englishName);
+        if (!catalogCard) {
+            unmatchedLines.push(`${parsed.raw} (找不到 ${buildDeckImportCardId(parsed.expansion, parsed.number)})`);
+            return;
+        }
+
+        importedCards.push({
+            name: catalogCard.name || parsed.englishName,
+            id: catalogCard.id || buildDeckImportCardId(parsed.expansion, parsed.number),
+            img: catalogCard.imageUrl || "",
+            rarity: catalogCard.rarity || "",
+            type: getDeckCardTypeFromCatalogCard(catalogCard),
+            qty: Math.max(1, parsed.qty),
+            bgColor: "#ffffff"
+        });
+    });
+
+    return { importedCards, unmatchedLines };
+}
+
 function getMetaLobbyTabs() {
     const config = cardsData.find(card => card.section === "meta_deck_lobby_config");
     const tabs = config?.lobbyTabs;
@@ -905,17 +1009,25 @@ function cloneMetaDeckDataForCopy(deckData = {}, overrides = {}) {
     };
 }
 
-function findDeckDefaultCardInfo(name) {
-    const variants = uniqueCardsDict[normalizeCardName(name)] || [];
+function findDeckDefaultCardInfo(defaultCard = {}) {
+    const normalizedId = normalizeCardId(defaultCard.id);
+    if (normalizedId) {
+        for (const variants of Object.values(uniqueCardsDict)) {
+            const match = variants.find(item => item.normalizedId === normalizedId);
+            if (match) return match;
+        }
+    }
+
+    const variants = uniqueCardsDict[normalizeCardName(defaultCard.name)] || [];
     return variants.find(item => item.imageUrl) || variants[0] || null;
 }
 
 function buildDefaultNewDeckCards() {
     return defaultNewDeckCards.map(card => {
-        const dictCard = findDeckDefaultCardInfo(card.name);
+        const dictCard = findDeckDefaultCardInfo(card);
         return {
             name: dictCard?.name || card.name,
-            id: dictCard?.id || "",
+            id: dictCard?.id || card.id || "",
             img: dictCard?.imageUrl || "",
             type: card.type,
             qty: card.qty,
@@ -926,11 +1038,12 @@ function buildDefaultNewDeckCards() {
 
 function buildDefaultNewDeckTabs(deckData) {
     const defaultCards = buildDefaultNewDeckCards();
+    const coverCard = getDeckMainCoverCard(deckData);
     return [{
         id: "default",
         name: "預設牌組",
-        coverCard: { name: "", img: deckData.coverImg || "" },
-        coverImg: deckData.coverImg || "",
+        coverCard,
+        coverImg: coverCard.img,
         cards: cloneDeckCards(defaultCards),
         replacements: []
     }];
@@ -952,6 +1065,13 @@ function getDeckTabCoverCard(tab, deck) {
     return {
         name: tab?.coverName || "",
         img: tab?.coverImg || deck?.deckData?.coverImg || ""
+    };
+}
+
+function getDeckMainCoverCard(deckData = {}) {
+    return {
+        name: deckData.coverCard?.name || deckData.coverName || "",
+        img: deckData.coverCard?.img || deckData.coverImg || ""
     };
 }
 
@@ -1110,10 +1230,12 @@ function openDeckReplacementModal(groupId, role, alternativeIndex = null, card =
 function openDeckModal(deck = null, tierName = "Tier 3") {
     deckForm.reset();
     editingDeckDocId = deck?.docId || null;
+    const coverCard = getDeckMainCoverCard(deck?.deckData || {});
     document.getElementById("deck-modal-title").innerText = editingDeckDocId ? "✏️ 編輯 Meta 牌組" : "➕ 新增 Meta 牌組";
     document.getElementById("deck-name").value = deck?.deckData?.name || "";
+    document.getElementById("deck-cover-card-name").value = coverCard.name || "";
     populateDeckVersionSelect(deck ? getDeckLobbyTabId(deck) : activeMetaLobbyTabId);
-    document.getElementById("deck-img").value = deck?.deckData?.coverImg || "";
+    document.getElementById("deck-img").value = coverCard.img || "";
     document.getElementById("deck-tier").value = deck?.deckData?.tier || tierName;
     updateDeckTierFieldVisibility();
     document.getElementById("deck-attribute").value = deck?.deckData?.attribute || "草";
@@ -1193,6 +1315,7 @@ const tier2Block = document.getElementById("tier-2-block");
 const tier3Block = document.getElementById("tier-3-block");
 const metaDeckDetailView = document.getElementById("meta-deck-detail-view");
 const btnBackDecks = document.getElementById("btn-back-decks");
+const btnImportDeckList = document.getElementById("btn-import-deck-list");
 const detailDeckTitle = document.getElementById("detail-deck-title");
 const detailDeckCover = document.getElementById("detail-deck-cover");
 const detailDeckRows = document.getElementById("detail-deck-rows");
@@ -1207,6 +1330,8 @@ const deckCoverFormModal = document.getElementById("deck-cover-form-modal");
 const deckCoverForm = document.getElementById("deck-cover-form");
 const deckReplacementFormModal = document.getElementById("deck-replacement-form-modal");
 const deckReplacementForm = document.getElementById("deck-replacement-form");
+const deckImportFormModal = document.getElementById("deck-import-modal");
+const deckImportForm = document.getElementById("deck-import-form");
 
 // ==========================================
 // 視圖切換邏輯
@@ -1656,7 +1781,7 @@ function renderAllViews() {
     }
 }
 
-function makeRarityBlockCollapsible(rowBlock) {
+function makeRarityBlockCollapsible(rowBlock, collapseKey = "") {
     const header = Array.from(rowBlock.children).find(child => child.classList.contains("rarity-header"));
     if (!header || rowBlock.classList.contains("toggle-row-block")) return;
 
@@ -1676,11 +1801,17 @@ function makeRarityBlockCollapsible(rowBlock) {
     header.classList.add("toggle-row-header");
     header.setAttribute("role", "button");
     header.setAttribute("tabindex", "0");
-    header.setAttribute("aria-expanded", "true");
+    const shouldCollapse = collapseKey && collapsedRarityBlocks.has(collapseKey);
+    if (shouldCollapse) rowBlock.classList.add("collapsed");
+    header.setAttribute("aria-expanded", String(!shouldCollapse));
 
     const toggle = () => {
         const isCollapsed = rowBlock.classList.toggle("collapsed");
         header.setAttribute("aria-expanded", String(!isCollapsed));
+        if (collapseKey) {
+            if (isCollapsed) collapsedRarityBlocks.add(collapseKey);
+            else collapsedRarityBlocks.delete(collapseKey);
+        }
     };
 
     header.addEventListener("click", toggle);
@@ -1733,7 +1864,8 @@ function renderMetaDecksList() {
         box.dataset.deckId = deck.docId;
         
         const deckName = deck.deckData?.name || "未命名牌組";
-        const deckImg = deck.deckData?.coverImg || "https://placehold.co/300x420/eaeaea/999999?text=Deck";
+        const deckMainCover = getDeckMainCoverCard(deck.deckData || {});
+        const deckImg = deckMainCover.img || "https://placehold.co/300x420/eaeaea/999999?text=Deck";
         const deckAttr = deck.deckData?.attribute || "無";
         const attrMeta = deckAttributeMeta[deckAttr] || { icon: "•", className: "attr-none" };
         box.classList.add(attrMeta.className);
@@ -1986,6 +2118,13 @@ btnBackDecks.addEventListener("click", () => {
     metaDeckDetailView.style.display = "none";
     metaDecksListView.style.display = "block";
     renderAllViews();
+});
+
+btnImportDeckList?.addEventListener("click", () => {
+    document.getElementById("deck-import-text").value = "";
+    document.getElementById("deck-import-replace").checked = true;
+    deckImportFormModal.classList.add("show");
+    document.getElementById("deck-import-text").focus();
 });
 
 function renderMetaDeckDetail() {
@@ -2515,6 +2654,7 @@ function renderChallenge24hTabs(tabs) {
     tabs.forEach(tab => {
         const wrapper = document.createElement("div");
         wrapper.className = "deck-tab-wrapper";
+        wrapper.setAttribute("draggable", "true");
 
         const tabBtn = document.createElement("button");
         tabBtn.type = "button";
@@ -2533,6 +2673,41 @@ function renderChallenge24hTabs(tabs) {
             openChallenge24hTabActions(e.currentTarget, tab, tabs);
         });
 
+        wrapper.addEventListener("dragstart", (e) => {
+            draggedChallenge24hTabId = tab.id;
+            e.dataTransfer.effectAllowed = "move";
+            setTimeout(() => wrapper.classList.add("dragging"), 0);
+        });
+
+        wrapper.addEventListener("dragend", () => {
+            wrapper.classList.remove("dragging");
+            draggedChallenge24hTabId = null;
+        });
+
+        wrapper.addEventListener("dragover", (e) => {
+            if (!draggedChallenge24hTabId || draggedChallenge24hTabId === tab.id) return;
+            e.preventDefault();
+            wrapper.classList.add("drag-over");
+        });
+
+        wrapper.addEventListener("dragleave", () => wrapper.classList.remove("drag-over"));
+
+        wrapper.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            wrapper.classList.remove("drag-over");
+            if (!draggedChallenge24hTabId || draggedChallenge24hTabId === tab.id) return;
+
+            const updatedTabs = [...tabs];
+            const fromIndex = updatedTabs.findIndex(item => item.id === draggedChallenge24hTabId);
+            const toIndex = updatedTabs.findIndex(item => item.id === tab.id);
+            if (fromIndex === -1 || toIndex === -1) return;
+
+            const [movedTab] = updatedTabs.splice(fromIndex, 1);
+            updatedTabs.splice(toIndex, 0, movedTab);
+            active24hVersionTabId = movedTab.id;
+            await saveChallenge24hVersionTabs(updatedTabs);
+        });
+
         wrapper.appendChild(tabBtn);
         tabsHost.appendChild(wrapper);
     });
@@ -2544,6 +2719,96 @@ function renderChallenge24hTabs(tabs) {
     addBtn.innerText = "+";
     addBtn.addEventListener("click", () => createChallenge24hVersionTab(tabs));
     tabsHost.appendChild(addBtn);
+
+    renderChallenge24hImportTools(tabsHost);
+}
+
+function renderChallenge24hImportTools(tabsHost) {
+    const expansionOptions = getChallenge24hImportExpansionOptions();
+    const defaultExpansion = getDefaultChallenge24hImportExpansion();
+    const toolEl = document.createElement("div");
+    toolEl.className = "challenge-24h-import-tools";
+    toolEl.innerHTML = `
+        <select class="challenge-24h-import-select" ${expansionOptions.length ? "" : "disabled"}>
+            ${expansionOptions.map(id => `<option value="${id}" ${id === defaultExpansion ? "selected" : ""}>${id}</option>`).join("")}
+        </select>
+        <button type="button" class="btn-secondary challenge-24h-import-btn" ${expansionOptions.length ? "" : "disabled"}>
+            匯入版本
+        </button>
+    `;
+
+    toolEl.querySelector(".challenge-24h-import-btn").addEventListener("click", async () => {
+        const select = toolEl.querySelector(".challenge-24h-import-select");
+        await importChallenge24hCardsFromCatalog(select.value, toolEl);
+    });
+
+    tabsHost.appendChild(toolEl);
+}
+
+async function importChallenge24hCardsFromCatalog(expansionId, toolEl = null) {
+    if (!expansionId) {
+        alert("目前沒有可匯入的圖鑑版本。");
+        return;
+    }
+
+    const cardsToImport = catalogCardsData
+        .filter(card => card.expansion === expansionId && challenge24hImportRarities.has(card.rarity))
+        .sort((a, b) => (a.id || "").localeCompare(b.id || "", "en", { numeric: true }));
+
+    if (!cardsToImport.length) {
+        alert(`「${expansionId}」沒有 3菱、4菱、1星、2星卡片可匯入。`);
+        return;
+    }
+
+    const existingIds = new Set(cardsData
+        .filter(card => card.section === "24h" && getChallenge24hCardVersionTabId(card) === active24hVersionTabId)
+        .map(card => normalizeCardId(card.id))
+        .filter(Boolean));
+
+    const uniqueCardsToImport = cardsToImport.filter(card => !existingIds.has(normalizeCardId(card.id)));
+    if (!uniqueCardsToImport.length) {
+        alert(`目前分頁已經有「${expansionId}」可匯入的卡片。`);
+        return;
+    }
+
+    if (!confirm(`要將「${expansionId}」的 ${uniqueCardsToImport.length} 張卡片匯入目前 24H 分頁嗎？`)) return;
+
+    const button = toolEl?.querySelector(".challenge-24h-import-btn");
+    if (button) {
+        button.disabled = true;
+        button.textContent = "匯入中...";
+    }
+
+    try {
+        for (let i = 0; i < uniqueCardsToImport.length; i += 450) {
+            const batch = writeBatch(db);
+            uniqueCardsToImport.slice(i, i + 450).forEach((card, index) => {
+                const cardRef = doc(cardsCollection);
+                batch.set(cardRef, {
+                    section: "24h",
+                    name: card.name || "",
+                    id: card.id || "",
+                    imageUrl: card.imageUrl || "",
+                    rarity: card.rarity || "",
+                    sourceRarity: card.sourceRarity || "",
+                    cardType: card.cardType || "",
+                    bgColor: "#ffffff",
+                    challenge24hData: {
+                        ownership: "無",
+                        versionTabId: active24hVersionTabId,
+                        order: Date.now() + i + index
+                    }
+                });
+            });
+            await batch.commit();
+        }
+        alert(`已匯入 ${uniqueCardsToImport.length} 張卡片。`);
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.textContent = "匯入版本";
+        }
+    }
 }
 
 function openChallenge24hTabActions(tabBtn, tab, tabs) {
@@ -2808,7 +3073,7 @@ function renderTwoStarCardsRows() {
             }
         }
         
-        makeRarityBlockCollapsible(rowBlock);
+        makeRarityBlockCollapsible(rowBlock, `two_star_cards:${currentTwoStarTab}:${rarity.name}`);
         rarityRowsContainerTwoStar.appendChild(rowBlock);
     });
 }
@@ -2966,7 +3231,7 @@ function renderGeneralCardsRows() {
         createHorizontalRowGeneral(rowBlock, targetCards, "false", "通用", "general-row-top", typeObj.name);
         createHorizontalRowGeneral(rowBlock, targetCards, "true", "特別屬性", "general-row-bottom", typeObj.name);
 
-        makeRarityBlockCollapsible(rowBlock);
+        makeRarityBlockCollapsible(rowBlock, `general_cards:${typeObj.name}`);
         rarityRowsContainerGeneral.appendChild(rowBlock);
     });
 }
@@ -3186,7 +3451,7 @@ function renderNeededCardsRows() {
         cardsListDiv.appendChild(inlineAddBtn);
 
         rowBlock.appendChild(cardsListDiv);
-        makeRarityBlockCollapsible(rowBlock);
+        makeRarityBlockCollapsible(rowBlock, `needed_cards:${currentNeededTab}:${rarity.name}`);
         rarityRowsContainerNeeded.appendChild(rowBlock);
     });
 }
@@ -3267,7 +3532,7 @@ function render24hRows() {
         cardsListDiv.appendChild(inlineAddBtn);
 
         rowBlock.appendChild(cardsListDiv);
-        makeRarityBlockCollapsible(rowBlock);
+        makeRarityBlockCollapsible(rowBlock, `24h:${active24hVersionTabId}:${rarity.name}`);
         rarityRowsContainer24h.appendChild(rowBlock);
     });
 }
@@ -3282,7 +3547,7 @@ function renderAltAccRows() {
         rowBlock.innerHTML = `<div class="rarity-header"><img src="${rarity.icon}"><span>${rarity.name} <span class="rarity-count">${getCardsQuantityTotal(targetCards)}</span></span></div>`;
         createHorizontalRowAlt(rowBlock, targetCards, "false", "主帳沒有的", "not-on-main", rarity.name);
         createHorizontalRowAlt(rowBlock, targetCards, "true", "主帳有的", "on-main", rarity.name);
-        makeRarityBlockCollapsible(rowBlock);
+        makeRarityBlockCollapsible(rowBlock, `alt_acc:${currentAccountTab}:${rarity.name}`);
         rarityRowsContainerAlt.appendChild(rowBlock);
     });
 }
@@ -3667,10 +3932,16 @@ deckForm.addEventListener("submit", async (e) => {
 
     const existingDeck = editingDeckDocId ? cardsData.find(c => c.docId === editingDeckDocId) : null;
     const selectedLobbyTabId = document.getElementById("deck-version").value || activeMetaLobbyTabId;
+    const coverCard = {
+        name: document.getElementById("deck-cover-card-name").value.trim(),
+        img: document.getElementById("deck-img").value.trim()
+    };
     const deckData = {
         name: document.getElementById("deck-name").value.trim(),
         version: getMetaLobbyTabName(selectedLobbyTabId),
-        coverImg: document.getElementById("deck-img").value.trim(),
+        coverCard,
+        coverName: coverCard.name,
+        coverImg: coverCard.img,
         tier: document.getElementById("deck-tier").value,
         attribute: document.getElementById("deck-attribute").value,
         cards: cloneDeckCards(existingDeck?.deckData?.cards || []), 
@@ -3743,6 +4014,36 @@ deckCardForm.addEventListener("submit", async (e) => {
     document.querySelector("#deck-card-form-modal h2").innerText = "➕ 放入卡牌至牌組";
     submitBtn.innerText = "加入牌組";
     submitBtn.disabled = false;
+});
+
+deckImportForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const deck = cardsData.find(c => c.docId === activeMetaDeckId);
+    if (!deck) return;
+
+    const { tabs, activeTab } = getActiveDeckTab(deck);
+    const importText = document.getElementById("deck-import-text").value;
+    const shouldReplace = document.getElementById("deck-import-replace").checked;
+    const { importedCards, unmatchedLines } = parseDeckImportText(importText);
+
+    if (!importedCards.length) {
+        alert(`沒有成功解析到可匯入的卡片。${unmatchedLines.length ? `\n\n未匹配：\n${unmatchedLines.join("\n")}` : ""}`);
+        return;
+    }
+
+    const nextCards = shouldReplace
+        ? importedCards
+        : [...cloneDeckCards(activeTab.cards || []), ...importedCards];
+    const updatedTabs = tabs.map(tab => tab.id === activeTab.id ? { ...tab, cards: nextCards } : tab);
+    await saveDeckTabs(deck, updatedTabs);
+
+    deckImportFormModal.classList.remove("show");
+    const message = [`已匯入 ${importedCards.length} 張卡片。`];
+    if (unmatchedLines.length) {
+        message.push(`\n以下 ${unmatchedLines.length} 行未匯入：`);
+        message.push(unmatchedLines.join("\n"));
+    }
+    alert(message.join("\n"));
 });
 
 deckCoverForm.addEventListener("submit", async (e) => {
@@ -3983,6 +4284,43 @@ deckCardNameInput.addEventListener("focus", (e) => renderDeckCardAutocomplete(e.
 
 const deckCoverNameInput = document.getElementById("deck-cover-name");
 const deckCoverAutocompleteList = document.getElementById("deck-cover-autocomplete-list");
+const deckMainCoverNameInput = document.getElementById("deck-cover-card-name");
+const deckMainCoverAutocompleteList = document.getElementById("deck-main-cover-autocomplete-list");
+
+function renderDeckMainCoverAutocomplete(filterText = "") {
+    if (!deckMainCoverAutocompleteList || !deckMainCoverNameInput) return;
+    deckMainCoverAutocompleteList.innerHTML = "";
+    const matchedCards = getAutocompleteMatches(filterText);
+
+    if (matchedCards.length === 0) {
+        deckMainCoverAutocompleteList.classList.remove("show");
+        return;
+    }
+
+    matchedCards.forEach(({ name, data: dictData }) => {
+        const itemDiv = document.createElement("div");
+        itemDiv.className = "autocomplete-item";
+        const imgUrl = dictData.imageUrl || "https://placehold.co/60x84/eaeaea/999999?text=X";
+        const displayId = dictData.id ? `#${dictData.id}` : "(無編號)";
+        itemDiv.innerHTML = `
+            <img src="${imgUrl}" onerror="this.src='https://placehold.co/60x84/eaeaea/999999?text=X'">
+            <div class="ac-details">
+                <span class="ac-name">${name}</span>
+                <span class="ac-id">${displayId}</span>
+            </div>
+        `;
+        itemDiv.addEventListener("click", () => {
+            deckMainCoverNameInput.value = name;
+            document.getElementById("deck-img").value = dictData.imageUrl || "";
+            deckMainCoverAutocompleteList.classList.remove("show");
+        });
+        deckMainCoverAutocompleteList.appendChild(itemDiv);
+    });
+    deckMainCoverAutocompleteList.classList.add("show");
+}
+
+deckMainCoverNameInput?.addEventListener("input", (e) => renderDeckMainCoverAutocomplete(e.target.value.trim()));
+deckMainCoverNameInput?.addEventListener("focus", (e) => renderDeckMainCoverAutocomplete(e.target.value.trim()));
 
 function renderDeckCoverAutocomplete(filterText = "") {
     deckCoverAutocompleteList.innerHTML = "";
@@ -4066,6 +4404,7 @@ deckReplacementNameInput.addEventListener("focus", (e) => renderDeckReplacementA
 document.addEventListener("click", (e) => {
     if (e.target !== cardNameInput && !autocompleteList.contains(e.target)) autocompleteList.classList.remove('show');
     if (e.target !== deckCardNameInput && !deckAutocompleteList.contains(e.target)) deckAutocompleteList.classList.remove('show');
+    if (deckMainCoverNameInput && e.target !== deckMainCoverNameInput && !deckMainCoverAutocompleteList.contains(e.target)) deckMainCoverAutocompleteList.classList.remove('show');
     if (e.target !== deckCoverNameInput && !deckCoverAutocompleteList.contains(e.target)) deckCoverAutocompleteList.classList.remove('show');
     if (e.target !== deckReplacementNameInput && !deckReplacementAutocompleteList.contains(e.target)) deckReplacementAutocompleteList.classList.remove('show');
 });
@@ -4125,6 +4464,7 @@ document.getElementById('close-deck-replacement-modal').addEventListener("click"
     editingReplacementContext = null;
     deckReplacementFormModal.classList.remove("show");
 });
+document.getElementById('close-deck-import-modal').addEventListener("click", () => deckImportFormModal.classList.remove("show"));
 document.getElementById('lightbox-close').addEventListener('click', () => lightboxModal.classList.remove('show'));
 
 window.addEventListener("click", (e) => { 
@@ -4145,6 +4485,7 @@ window.addEventListener("click", (e) => {
         editingReplacementContext = null;
         deckReplacementFormModal.classList.remove("show");
     }
+    if (e.target === deckImportFormModal) deckImportFormModal.classList.remove("show");
     if (e.target === lightboxModal) lightboxModal.classList.remove('show');
     if (e.target === quickTierModal) quickTierModal.classList.remove('show');
 });
@@ -4248,6 +4589,7 @@ onSnapshot(cardCatalogCollection, (snapshot) => {
     catalogCardsData = snapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
     rebuildUniqueCardsDict(cardsData);
     if (currentSection === "card_catalog") renderCardCatalog();
+    if (currentSection === "24h") render24hRows();
 }, error => {
     console.error("官方卡池資料載入失敗：", error);
 });

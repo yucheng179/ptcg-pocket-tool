@@ -15,7 +15,7 @@
             </div>
             <ul id="sidebar-menu" class="sidebar-menu">
                 <li><span class="nav-icon">✨</span><span class="nav-text">稀有度</span></li>
-                <li id="nav-card-catalog"><span class="nav-icon">📦</span><span class="nav-text">卡片圖鑑</span></li>
+                <li id="nav-card-catalog"><span class="nav-icon">📓</span><span class="nav-text">卡片圖鑑</span></li>
                 <li id="nav-meta-decks"><span class="nav-icon">🔥</span><span class="nav-text">Meta牌組</span></li>
                 <li id="nav-needed-cards"><span class="nav-icon">🎯</span><span class="nav-text">需要卡</span></li>
                 <li id="nav-general-cards"><span class="nav-icon">🛠️</span><span class="nav-text">泛用卡</span></li>
@@ -123,7 +123,10 @@
                 <div id="meta-deck-detail-view" style="display: none;">
                     <div style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
                         <button id="btn-back-decks" class="btn-secondary">🔙 返回牌組列表</button>
-                        <h2 id="detail-deck-title" style="margin: 0; color: #007aff;"></h2>
+                        <div class="deck-detail-header-actions">
+                            <button id="btn-import-deck-list" class="btn-secondary">匯入牌組</button>
+                            <h2 id="detail-deck-title" style="margin: 0; color: #007aff;"></h2>
+                        </div>
                     </div>
                     <div class="deck-detail-layout">
                         <div class="deck-detail-left">
@@ -308,7 +311,12 @@
                     <input type="text" id="deck-name" placeholder="例如: 皮卡丘EX快攻" required>
                 </div>
                 <div class="input-group">
-                    <label>王牌封面圖片網址：</label>
+                    <label>封面寶可夢名稱：</label>
+                    <input type="text" id="deck-cover-card-name" placeholder="例如: 皮卡丘EX" autocomplete="off">
+                    <div id="deck-main-cover-autocomplete-list" class="autocomplete-dropdown"></div>
+                </div>
+                <div class="input-group">
+                    <label>封面寶可夢圖片網址：</label>
                     <input type="url" id="deck-img" placeholder="請貼上封面圖片網址" required>
                 </div>
                 <div class="input-group">
@@ -454,6 +462,24 @@
                 <button class="tier-btn tier-de" data-tier="E">E 級</button>
                 <button class="tier-btn tier-default" data-tier="無" style="width: 100%;">無 (清除評分)</button>
             </div>
+        </div>
+    </div>
+
+    <div id="deck-import-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-deck-import-modal">&times;</span>
+            <h2>📥 匯入牌組</h2>
+            <form id="deck-import-form">
+                <div class="input-group">
+                    <label>貼上牌組文字：</label>
+                    <textarea id="deck-import-text" class="deck-import-textarea" placeholder="2 Magnemite B1a 24&#10;2 Magneton A1 98&#10;Energy: Lightning" required></textarea>
+                </div>
+                <label class="deck-import-checkbox">
+                    <input type="checkbox" id="deck-import-replace" checked>
+                    清空目前分頁卡片後匯入
+                </label>
+                <button type="submit" class="btn-primary" style="width:100%; margin-top: 10px;">匯入牌組</button>
+            </form>
         </div>
     </div>
 

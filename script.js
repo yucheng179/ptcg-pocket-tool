@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
+import { browserLocalPersistence, getAuth, GoogleAuthProvider, getRedirectResult, onAuthStateChanged, setPersistence, signInWithPopup, signInWithRedirect, signOut } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBdT8oG7bjqOIZlnjEvkoxBz1GTlTx4s-k",
@@ -12,8 +13,14 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
+const auth = getAuth(app);
+const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
+const authReady = setPersistence(auth, browserLocalPersistence).catch((error) => {
+    console.error("Firebase Auth persistence setup failed:", error);
+});
 const cardsCollection = collection(db, "ptcg_cards"); 
-const cardCatalogCollection = collection(db, "ptcg_card_catalog");
+const cardCatalogJsonUrl = "crawler/raenonx-cards.json";
 
 let cardsData = [];
 let uniqueCardsDict = {}; 
@@ -54,6 +61,8 @@ const DEFAULT_24H_VERSION_TAB_ID = "b4";
 let active24hVersionTabId = DEFAULT_24H_VERSION_TAB_ID;
 let challenge24hTabClickTimer = null;
 let draggedChallenge24hTabId = null;
+let currentAuthUser = null;
+let unsubscribeCardsSnapshot = null;
 
 // --- 常數定義 ---
 const catalogExpansionIds = [
@@ -1297,9 +1306,63 @@ const viewMetaDecks = document.getElementById("view-meta-decks");
 const viewCardCatalog = document.getElementById("view-card-catalog");
 
 const pageTitle = document.getElementById("page-title");
+const authUserInfo = document.getElementById("auth-user-info");
+const btnGoogleLogin = document.getElementById("btn-google-login");
+const btnGoogleLogout = document.getElementById("btn-google-logout");
 const sidebar = document.getElementById('sidebar');
 const sidebarToggleBtn = document.getElementById('sidebar-toggle');
 sidebarToggleBtn.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+
+function getGoogleSignInErrorMessage(error) {
+    const code = error?.code || "";
+    if (code === "auth/unauthorized-domain") {
+        return "目前網址尚未加入 Firebase Authentication 的 Authorized domains。請到 Firebase Console > Authentication > Settings > Authorized domains 加入目前使用的網域，例如 localhost、127.0.0.1 或你的 web.app 網域。";
+    }
+    if (code === "auth/popup-blocked") return "登入彈出視窗被瀏覽器阻擋，將改用重新導向登入。";
+    if (code === "auth/popup-closed-by-user") return "登入視窗已關閉，請再試一次。";
+    if (code === "auth/cancelled-popup-request") return "已有另一個登入視窗正在處理，請稍等後再試。";
+    return error?.message || "未知錯誤";
+}
+
+async function handleGoogleLogin() {
+    if (!btnGoogleLogin) return;
+    const originalText = btnGoogleLogin.textContent;
+    btnGoogleLogin.disabled = true;
+    btnGoogleLogin.textContent = "登入中...";
+
+    try {
+        await authReady;
+        await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+        console.error("Google sign-in failed:", error);
+        const code = error?.code || "";
+        const shouldUseRedirect = ["auth/popup-blocked", "auth/operation-not-supported-in-this-environment"].includes(code);
+        if (shouldUseRedirect) {
+            await signInWithRedirect(auth, googleProvider);
+            return;
+        }
+        alert(`Google 登入失敗：${getGoogleSignInErrorMessage(error)}`);
+    } finally {
+        btnGoogleLogin.disabled = false;
+        btnGoogleLogin.textContent = originalText;
+    }
+}
+
+btnGoogleLogin?.addEventListener("click", handleGoogleLogin);
+
+getRedirectResult(auth).catch((error) => {
+    console.error("Google redirect sign-in failed:", error);
+    alert(`Google 登入失敗：${getGoogleSignInErrorMessage(error)}`);
+});
+
+btnGoogleLogout?.addEventListener("click", async () => {
+    try {
+        await signOut(auth);
+    } catch (error) {
+        console.error("Google sign-out failed:", error);
+        alert(`登出失敗：${error?.message || "未知錯誤"}`);
+    }
+});
 
 // Meta 牌組 DOM
 const metaDecksListView = document.getElementById("meta-decks-list-view");
@@ -1575,7 +1638,7 @@ function renderCardCatalog() {
         catalogExpansionsGrid.innerHTML = `
             <div class="catalog-empty-state">
                 <strong>尚未載入卡片圖鑑資料</strong>
-                <span>請先匯入 ptcg_card_catalog，或稍等 Firebase 同步完成。</span>
+                <span>請確認 crawler/raenonx-cards.json 是否存在，或稍等 JSON 載入完成。</span>
             </div>
         `;
         return;
@@ -1643,7 +1706,7 @@ function renderCatalogExpansionDetail(expansionId) {
         catalogCardsGrid.innerHTML = `
             <div class="catalog-empty-state">
                 <strong>${expansionId} 目前沒有卡片資料</strong>
-                <span>請確認 ptcg_card_catalog 是否已匯入最新版。</span>
+                <span>請確認 crawler/raenonx-cards.json 是否已更新並部署。</span>
             </div>
         `;
         return;
@@ -2444,6 +2507,99 @@ function renderDeckTabCoverEditor(deck, tabs, activeTab) {
     detailDeckCover.ondblclick = () => openDeckCoverModal(deck, activeTab);
 }
 
+function closeTabActionMenus() {
+    document.querySelectorAll(".meta-lobby-tab-actions").forEach(menu => menu.remove());
+}
+
+function showTabActions(tabBtn, actions) {
+    const wrapper = tabBtn.closest(".deck-tab-wrapper");
+    if (!wrapper) return null;
+    closeTabActionMenus();
+    actions.addEventListener("click", (event) => event.stopPropagation());
+    actions.addEventListener("contextmenu", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+    });
+    wrapper.appendChild(actions);
+    return wrapper;
+}
+
+function openDeckTabActions(tabBtn, deck, tab, tabs) {
+    const actions = document.createElement("div");
+    actions.className = "meta-lobby-tab-actions";
+    actions.innerHTML = `
+        <button type="button" class="meta-lobby-action rename">更名</button>
+        <button type="button" class="meta-lobby-action delete">刪除</button>
+        <button type="button" class="meta-lobby-action cancel">取消</button>
+    `;
+
+    actions.querySelector(".rename").addEventListener("click", (e) => {
+        e.stopPropagation();
+        openInlineDeckTabRename(actions, deck, tab, tabs);
+    });
+    actions.querySelector(".delete").addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (tabs.length <= 1) {
+            alert("至少需要保留一個分頁。");
+            renderMetaDeckDetail();
+            return;
+        }
+        if (!confirm(`確定要刪除「${tab.name}」分頁嗎？`)) {
+            renderMetaDeckDetail();
+            return;
+        }
+        const tabIndex = tabs.findIndex(item => item.id === tab.id);
+        const updatedTabs = tabs.filter(item => item.id !== tab.id);
+        if (activeDeckTabId === tab.id) {
+            activeDeckTabId = updatedTabs[Math.max(0, tabIndex - 1)]?.id || updatedTabs[0].id;
+        }
+        await saveDeckTabs(deck, updatedTabs);
+    });
+    actions.querySelector(".cancel").addEventListener("click", (e) => {
+        e.stopPropagation();
+        actions.remove();
+    });
+
+    showTabActions(tabBtn, actions);
+}
+
+function openInlineDeckTabRename(targetEl, deck, tab, tabs) {
+    const wrapper = targetEl.closest(".deck-tab-wrapper");
+    const tabBtn = wrapper?.querySelector(".deck-tab-btn");
+    if (!wrapper || !tabBtn) return;
+    targetEl.remove();
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "deck-tab-rename-input";
+    input.value = tab.name;
+    input.addEventListener("click", (event) => event.stopPropagation());
+    input.addEventListener("contextmenu", (event) => event.stopPropagation());
+
+    let isFinished = false;
+    const finishRename = async (shouldSave) => {
+        if (isFinished) return;
+        isFinished = true;
+        const newName = input.value.trim();
+
+        if (shouldSave && newName && newName !== tab.name) {
+            const updatedTabs = tabs.map(item => item.id === tab.id ? { ...item, name: newName } : item);
+            await saveDeckTabs(deck, updatedTabs);
+        } else {
+            renderMetaDeckDetail();
+        }
+    };
+
+    input.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") finishRename(true);
+        if (event.key === "Escape") finishRename(false);
+    });
+    input.addEventListener("blur", () => finishRename(true));
+
+    wrapper.replaceChild(input, tabBtn);
+    input.focus();
+    input.select();
+}
+
 function renderDeckTabsBar(deck, tabs, activeTab) {
     const detailLayout = document.querySelector("#meta-deck-detail-view .deck-detail-layout");
     metaDeckDetailView.querySelector(".deck-tabs-bar")?.remove();
@@ -2463,60 +2619,11 @@ function renderDeckTabsBar(deck, tabs, activeTab) {
                 renderMetaDeckDetail();
             }, 180);
         });
-        tabBtn.addEventListener("dblclick", async (e) => {
+        tabBtn.addEventListener("contextmenu", (e) => {
             e.stopPropagation();
+            e.preventDefault();
             clearTimeout(deckTabClickTimer);
-            const wrapper = e.currentTarget.closest(".deck-tab-wrapper");
-            const input = document.createElement("input");
-            input.type = "text";
-            input.className = "deck-tab-rename-input";
-            input.value = tab.name;
-            input.addEventListener("click", (event) => event.stopPropagation());
-            input.addEventListener("dblclick", (event) => event.stopPropagation());
-
-            let isFinished = false;
-            const finishRename = async (shouldSave) => {
-                if (isFinished) return;
-                isFinished = true;
-                const newName = input.value.trim();
-
-                if (shouldSave && newName && newName !== tab.name) {
-                    const updatedTabs = tabs.map(item => item.id === tab.id ? { ...item, name: newName } : item);
-                    await saveDeckTabs(deck, updatedTabs);
-                } else {
-                    renderMetaDeckDetail();
-                }
-            };
-
-            input.addEventListener("keydown", (event) => {
-                if (event.key === "Enter") finishRename(true);
-                if (event.key === "Escape") finishRename(false);
-            });
-            input.addEventListener("blur", () => finishRename(true));
-
-            wrapper.replaceChild(input, e.currentTarget);
-            input.focus();
-            input.select();
-        });
-
-        const deleteBtn = document.createElement("button");
-        deleteBtn.type = "button";
-        deleteBtn.className = "deck-tab-tool";
-        deleteBtn.title = "刪除分頁";
-        deleteBtn.innerText = "×";
-        deleteBtn.addEventListener("click", async (e) => {
-            e.stopPropagation();
-            if (tabs.length <= 1) {
-                alert("至少需要保留一個分頁。");
-                return;
-            }
-            if (!confirm(`確定要刪除「${tab.name}」分頁嗎？`)) return;
-            const tabIndex = tabs.findIndex(item => item.id === tab.id);
-            const updatedTabs = tabs.filter(item => item.id !== tab.id);
-            if (activeDeckTabId === tab.id) {
-                activeDeckTabId = updatedTabs[Math.max(0, tabIndex - 1)]?.id || updatedTabs[0].id;
-            }
-            await saveDeckTabs(deck, updatedTabs);
+            openDeckTabActions(e.currentTarget, deck, tab, tabs);
         });
 
         const wrapper = document.createElement("div");
@@ -2544,7 +2651,6 @@ function renderDeckTabsBar(deck, tabs, activeTab) {
             await reorderDeckTabs(deck, tabs, tab.id);
         });
         wrapper.appendChild(tabBtn);
-        wrapper.appendChild(deleteBtn);
         tabsBar.appendChild(wrapper);
     });
 
@@ -2594,8 +2700,9 @@ function renderMetaLobbyTabs(tabs) {
             }, 180);
         });
         if (!isFixedTab) {
-            tabBtn.addEventListener("dblclick", (e) => {
+            tabBtn.addEventListener("contextmenu", (e) => {
                 e.stopPropagation();
+                e.preventDefault();
                 clearTimeout(metaLobbyTabClickTimer);
                 openLobbyTabActions(e.currentTarget, tab, tabs);
             });
@@ -2667,8 +2774,9 @@ function renderChallenge24hTabs(tabs) {
                 render24hRows();
             }, 180);
         });
-        tabBtn.addEventListener("dblclick", (e) => {
+        tabBtn.addEventListener("contextmenu", (e) => {
             e.stopPropagation();
+            e.preventDefault();
             clearTimeout(challenge24hTabClickTimer);
             openChallenge24hTabActions(e.currentTarget, tab, tabs);
         });
@@ -2812,7 +2920,6 @@ async function importChallenge24hCardsFromCatalog(expansionId, toolEl = null) {
 }
 
 function openChallenge24hTabActions(tabBtn, tab, tabs) {
-    const wrapper = tabBtn.closest(".deck-tab-wrapper");
     const actions = document.createElement("div");
     actions.className = "meta-lobby-tab-actions";
     actions.innerHTML = `
@@ -2831,14 +2938,17 @@ function openChallenge24hTabActions(tabBtn, tab, tabs) {
     });
     actions.querySelector(".cancel").addEventListener("click", (e) => {
         e.stopPropagation();
-        render24hRows();
+        actions.remove();
     });
 
-    wrapper.replaceChild(actions, tabBtn);
+    showTabActions(tabBtn, actions);
 }
 
 function openInlineChallenge24hTabRename(targetEl, tab, tabs) {
     const wrapper = targetEl.closest(".deck-tab-wrapper");
+    const tabBtn = wrapper?.querySelector(".deck-tab-btn");
+    if (!wrapper || !tabBtn) return;
+    targetEl.remove();
     const input = document.createElement("input");
     input.type = "text";
     input.className = "deck-tab-rename-input";
@@ -2862,7 +2972,7 @@ function openInlineChallenge24hTabRename(targetEl, tab, tabs) {
         if (e.key === "Escape") finish(false);
     });
     input.addEventListener("blur", () => finish(true));
-    wrapper.replaceChild(input, targetEl);
+    wrapper.replaceChild(input, tabBtn);
     input.focus();
     input.select();
 }
@@ -2900,7 +3010,6 @@ async function deleteChallenge24hVersionTab(tab, tabs) {
 
 function openLobbyTabActions(tabBtn, tab, tabs) {
     if (tab.id === AUTO_TEAM_LOBBY_TAB_ID) return;
-    const wrapper = tabBtn.closest(".deck-tab-wrapper");
     const actions = document.createElement("div");
     actions.className = "meta-lobby-tab-actions";
     actions.innerHTML = `
@@ -2919,10 +3028,10 @@ function openLobbyTabActions(tabBtn, tab, tabs) {
     });
     actions.querySelector(".cancel").addEventListener("click", (e) => {
         e.stopPropagation();
-        renderMetaDecksList();
+        actions.remove();
     });
 
-    wrapper.replaceChild(actions, tabBtn);
+    showTabActions(tabBtn, actions);
 }
 
 async function deleteMetaLobbyTab(tab, tabs) {
@@ -2946,6 +3055,9 @@ async function deleteMetaLobbyTab(tab, tabs) {
 
 function openInlineLobbyTabRename(targetEl, tab, tabs) {
     const wrapper = targetEl.closest(".deck-tab-wrapper");
+    const tabBtn = wrapper?.querySelector(".deck-tab-btn");
+    if (!wrapper || !tabBtn) return;
+    targetEl.remove();
     const input = document.createElement("input");
     input.type = "text";
     input.className = "deck-tab-rename-input";
@@ -2969,7 +3081,7 @@ function openInlineLobbyTabRename(targetEl, tab, tabs) {
         if (e.key === "Escape") finish(false);
     });
     input.addEventListener("blur", () => finish(true));
-    wrapper.replaceChild(input, targetEl);
+    wrapper.replaceChild(input, tabBtn);
     input.focus();
     input.select();
 }
@@ -4312,6 +4424,10 @@ function renderDeckMainCoverAutocomplete(filterText = "") {
         itemDiv.addEventListener("click", () => {
             deckMainCoverNameInput.value = name;
             document.getElementById("deck-img").value = dictData.imageUrl || "";
+            const deckNameInput = document.getElementById("deck-name");
+            if (!editingDeckDocId && deckNameInput && deckNameInput.value.trim() === "") {
+                deckNameInput.value = name;
+            }
             deckMainCoverAutocompleteList.classList.remove("show");
         });
         deckMainCoverAutocompleteList.appendChild(itemDiv);
@@ -4402,6 +4518,7 @@ deckReplacementNameInput.addEventListener("focus", (e) => renderDeckReplacementA
 
 // 點擊外面時關閉選單
 document.addEventListener("click", (e) => {
+    if (!e.target.closest(".deck-tab-wrapper")) closeTabActionMenus();
     if (e.target !== cardNameInput && !autocompleteList.contains(e.target)) autocompleteList.classList.remove('show');
     if (e.target !== deckCardNameInput && !deckAutocompleteList.contains(e.target)) deckAutocompleteList.classList.remove('show');
     if (deckMainCoverNameInput && e.target !== deckMainCoverNameInput && !deckMainCoverAutocompleteList.contains(e.target)) deckMainCoverAutocompleteList.classList.remove('show');
@@ -4493,7 +4610,74 @@ window.addEventListener("click", (e) => {
 // ==========================================
 // 終極即時連線引擎 與 字典產生器
 // ==========================================
+function setAuthPanelState(user) {
+    if (!authUserInfo || !btnGoogleLogin || !btnGoogleLogout) return;
+
+    if (user) {
+        authUserInfo.classList.remove("signed-out");
+        authUserInfo.classList.add("signed-in");
+        authUserInfo.textContent = `已登入：${user.email || "Google 帳號"}`;
+        btnGoogleLogin.style.display = "none";
+        btnGoogleLogout.style.display = "";
+    } else {
+        authUserInfo.classList.remove("signed-in");
+        authUserInfo.classList.add("signed-out");
+        authUserInfo.textContent = "尚未登入，請先使用 Google 登入。";
+        btnGoogleLogin.style.display = "";
+        btnGoogleLogout.style.display = "none";
+    }
+}
+
+function setSignedOutMessage() {
+    const html = `<p style="text-align:center; color:#d9363e; padding:20px;">請先使用右上角的 Google 登入，登入後資料會自動載入。</p>`;
+    [
+        rarityRowsContainerAlt,
+        rarityRowsContainer24h,
+        rarityRowsContainerNeeded,
+        rarityRowsContainerGeneral,
+        rarityRowsContainerTwoStar
+    ].forEach(container => {
+        if (container) container.innerHTML = html;
+    });
+}
+
+function stopFirestoreListeners() {
+    if (unsubscribeCardsSnapshot) {
+        unsubscribeCardsSnapshot();
+        unsubscribeCardsSnapshot = null;
+    }
+}
+
 rarityRowsContainerAlt.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>📡 建立即時連線中...</p>";
+
+async function loadCatalogCardsFromJson() {
+    try {
+        const response = await fetch(cardCatalogJsonUrl, { cache: "default" });
+        if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+
+        const cards = await response.json();
+        catalogCardsData = Array.isArray(cards)
+            ? cards.map((card, index) => ({
+                docId: card.docId || card.id || card.cardId || `catalog-${index}`,
+                ...card,
+                imageUrl: card.imageUrl || card.img || "",
+                img: card.img || card.imageUrl || ""
+            }))
+            : [];
+
+        rebuildUniqueCardsDict(cardsData);
+        if (currentSection === "card_catalog") renderCardCatalog();
+        if (currentSection === "24h") render24hRows();
+    } catch (error) {
+        console.error("Catalog JSON load failed:", error);
+        catalogCardsData = [];
+        rebuildUniqueCardsDict(cardsData);
+        if (currentSection === "card_catalog") {
+            document.getElementById("catalog-expansions-grid").innerHTML =
+                `<p style="color:#d9363e; padding:20px;">卡片圖鑑 JSON 載入失敗：${error.message}</p>`;
+        }
+    }
+}
 
 function showFirestoreLoadError(error) {
     console.error("Firestore 即時連線失敗：", error);
@@ -4512,7 +4696,10 @@ function showFirestoreLoadError(error) {
     });
 }
 
-onSnapshot(cardsCollection, (snapshot) => {
+function startFirestoreListeners() {
+    if (unsubscribeCardsSnapshot) return;
+
+    unsubscribeCardsSnapshot = onSnapshot(cardsCollection, (snapshot) => {
     const rawCards = snapshot.docs.map(doc => {
         const data = doc.data();
         const section = data.section || "alt_acc";
@@ -4584,12 +4771,21 @@ onSnapshot(cardsCollection, (snapshot) => {
     rebuildUniqueCardsDict(cardsData);
     renderAllViews();
 }, showFirestoreLoadError);
+}
 
-onSnapshot(cardCatalogCollection, (snapshot) => {
-    catalogCardsData = snapshot.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
-    rebuildUniqueCardsDict(cardsData);
-    if (currentSection === "card_catalog") renderCardCatalog();
-    if (currentSection === "24h") render24hRows();
-}, error => {
-    console.error("官方卡池資料載入失敗：", error);
+loadCatalogCardsFromJson();
+
+onAuthStateChanged(auth, (user) => {
+    currentAuthUser = user;
+    setAuthPanelState(user);
+    stopFirestoreListeners();
+
+    if (user) {
+        rarityRowsContainerAlt.innerHTML = "<p style='text-align:center; color:#888; padding:20px;'>📡 建立即時連線中...</p>";
+        startFirestoreListeners();
+    } else {
+        cardsData = [];
+        rebuildUniqueCardsDict([]);
+        setSignedOutMessage();
+    }
 });

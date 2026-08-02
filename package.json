@@ -1,8 +1,6 @@
 {
   "scripts": {
     "crawl:cards": "node crawler/raenonx-cards.mjs",
-    "import:cards": "node crawler/import-cards-to-firestore.mjs",
-    "import:cards:prune": "node crawler/import-cards-to-firestore.mjs --prune",
     "sync:cards": "node crawler/sync-ptcg-cards-from-catalog.mjs",
     "sync:cards:dry-run": "node crawler/sync-ptcg-cards-from-catalog.mjs --dry-run"
   },

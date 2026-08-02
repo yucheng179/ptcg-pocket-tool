@@ -83,7 +83,12 @@ body { margin: 0; font-family: sans-serif; background-color: #f0f3f6; color: #33
    主要內容區與標題
    ========================================= */
 .main-content { flex: 1; padding: 30px; overflow-y: auto; }
-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; z-index: 20; }
+.auth-panel { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; position: relative; z-index: 21; pointer-events: auto; }
+.auth-panel button { pointer-events: auto; }
+.auth-user-info { font-size: 13px; color: #5d6b7a; max-width: 360px; overflow-wrap: anywhere; text-align: right; }
+.auth-user-info.signed-in { color: #237804; }
+.auth-user-info.signed-out { color: #d9363e; }
 .btn-primary { background: #007aff; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold;}
 .btn-secondary { background: #fff; color: #555; border: 1px solid #ddd; padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
 .btn-secondary:hover { background: #f0f0f0; }
@@ -1137,6 +1142,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     color: #007aff;
     border-bottom-color: #007aff;
 }
+#meta-deck-detail-view .deck-tab-btn {
+    min-width: 100px;
+    justify-content: center;
+}
 .deck-tab-rename-input {
     width: 120px;
     padding: 8px 10px;
@@ -1186,6 +1195,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     font-weight: 700;
 }
 .meta-lobby-tab-actions {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 6px);
+    z-index: 60;
     min-width: 190px;
     display: inline-flex;
     align-items: center;

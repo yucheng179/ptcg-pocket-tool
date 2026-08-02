@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import { initializeApp } from "firebase/app";
 import {
   collection,
@@ -20,6 +21,7 @@ const firebaseConfig = {
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const batchSize = 450;
+const catalogJsonPath = "crawler/raenonx-cards.json";
 const legacyRarityMap = {
   "1彩星": "1閃",
   "2彩星": "2閃"
@@ -27,7 +29,6 @@ const legacyRarityMap = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const catalogCollection = collection(db, "ptcg_card_catalog");
 const cardsCollection = collection(db, "ptcg_cards");
 
 function sleep(ms) {
@@ -406,17 +407,20 @@ async function commitOperations(operations) {
   }
 }
 
-const catalogSnapshot = await getDocs(catalogCollection);
-const catalogCards = catalogSnapshot.docs.map(documentSnapshot => ({
-  docId: documentSnapshot.id,
-  ...documentSnapshot.data()
-}));
+const catalogCards = JSON.parse(await fs.readFile(catalogJsonPath, "utf8"))
+  .filter(card => card?.name && (card.id || card.imageUrl))
+  .map((card, index) => ({
+    docId: card.docId || card.id || card.cardId || `catalog-${index}`,
+    ...card,
+    imageUrl: card.imageUrl || card.img || "",
+    img: card.img || card.imageUrl || ""
+  }));
 const catalogById = getCatalogById(catalogCards);
 const catalogByCardId = getCatalogByCardId(catalogCards);
 const catalogByNameImage = getCatalogByNameImage(catalogCards);
 
 if (catalogById.size === 0) {
-  console.log("ptcg_card_catalog 目前沒有可用資料，請先執行：node crawler\\import-cards-to-firestore.mjs --prune");
+  console.log(`No catalog cards found in ${catalogJsonPath}. Run: node crawler\\raenonx-cards.mjs`);
   await terminate(db);
   process.exit(1);
 }

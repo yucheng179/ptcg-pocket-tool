@@ -100,8 +100,21 @@ function getCardName(cardEntry, messages) {
   return messages?.Game?.Master?.Card?.Name?.[nameId] || "";
 }
 
+const regionalFormPrefixes = ["\u963f\u7f85\u62c9", "\u4f3d\u52d2\u723e", "\u6d17\u7fe0", "\u5e15\u5e95\u4e9e"];
+
+function normalizeRegionalFormSpacing(name) {
+  let normalizedName = name;
+  regionalFormPrefixes.forEach(prefix => {
+    normalizedName = normalizedName.replace(new RegExp(`^(${prefix})(?!\\s)`), "$1 ");
+    normalizedName = normalizedName.replace(new RegExp(`^(\u8d85\u7d1a${prefix})(?!\\s)`), "$1 ");
+  });
+  return normalizedName;
+}
+
 function formatDisplayCardName(name) {
-  const trimmedName = (name || "").trim();
+  let trimmedName = (name || "").trim();
+  trimmedName = normalizeRegionalFormSpacing(trimmedName);
+  trimmedName = trimmedName.replace(/^厄鬼椪(碧草面具|火灶面具|水井面具|礎石面具)/, "厄鬼椪 $1");
   const megaMatch = trimmedName.match(/^超級(.+)ex$/);
   if (megaMatch) return `Mega${megaMatch[1]}`;
   if (trimmedName.endsWith("ex")) return `${trimmedName.slice(0, -2)}EX`;

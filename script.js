@@ -745,6 +745,18 @@ function isSameCardIdentity(a = {}, b = {}) {
     return Boolean(nameA && nameB && imageA && imageB && nameA === nameB && imageA === imageB);
 }
 
+function getCardIdentityKeys(card = {}) {
+    const keys = [];
+    const normalizedId = normalizeCardId(card.id || "");
+    if (normalizedId) keys.push(`id:${normalizedId}`);
+
+    const normalizedName = normalizeCardName(card.name || "");
+    const normalizedImage = normalizeCardImageUrl(card.imageUrl || card.img || "");
+    if (normalizedName && normalizedImage) keys.push(`name-img:${normalizedName}|${normalizedImage}`);
+
+    return keys;
+}
+
 function findMatchingAltAccHighRarityCard(cardObj, accountType, excludeDocId = null) {
     return cardsData.find(card =>
         card.docId !== excludeDocId
@@ -3582,7 +3594,7 @@ function render24hRows() {
             && getChallenge24hCardVersionTabId(c) === active24hVersionTabId
             && c.rarity === rarity.name
         );
-        const ownedCount = targetCards.filter(c => c.computedOwnership && c.computedOwnership !== "無").length;
+        const ownedCount = targetCards.filter(c => c.computedOwnership === "取得").length;
         
         const rowBlock = document.createElement("div");
         rowBlock.className = "rarity-row-block";
@@ -4745,22 +4757,44 @@ function startFirestoreListeners() {
         return { docId: doc.id, ...data, section, altAccData, challenge24hData, neededCardsData, generalData, twoStarData };
     });
 
-    const altAccStatusMap = {};
-    rawCards.filter(c => c.section === "alt_acc" && c.id && c.id.trim() !== "").forEach(c => {
-        const accType = c.altAccData?.accountType;
-        const currentHighest = altAccStatusMap[c.id];
+    const setAltAccStatus = (key, accType) => {
+        const currentHighest = altAccStatusMap[key];
         if (accType === "資源帳") {
-            altAccStatusMap[c.id] = "資源帳";
+            altAccStatusMap[key] = "資源帳";
         } else if (accType === "小帳" && currentHighest !== "資源帳") {
-            altAccStatusMap[c.id] = "小帳";
+            altAccStatusMap[key] = "小帳";
         }
+    };
+
+    const altAccStatusMap = {};
+    rawCards.filter(c => c.section === "alt_acc").forEach(c => {
+        const accType = c.altAccData?.accountType;
+        getCardIdentityKeys(c).forEach(key => setAltAccStatus(key, accType));
+    });
+
+    const highRarityMainOwnedMap = {};
+    rawCards.filter(c =>
+        c.section === "two_star_cards"
+        && c.rarity === "2星"
+        && c.twoStarData?.tab === "擁有的卡"
+        && ["主帳", "本帳"].includes(c.twoStarData?.status)
+    ).forEach(c => {
+        getCardIdentityKeys(c).forEach(key => {
+            highRarityMainOwnedMap[key] = true;
+        });
     });
 
     cardsData = rawCards.map(c => {
         if (c.section === "24h") {
             let dbOwnership = c.challenge24hData?.ownership || "無";
-            if (dbOwnership !== "取得" && c.id && altAccStatusMap[c.id]) {
-                c.computedOwnership = altAccStatusMap[c.id]; 
+            const identityKeys = getCardIdentityKeys(c);
+            const hasHighRarityMainOwned = identityKeys.some(key => highRarityMainOwnedMap[key]);
+            const altAccOwnership = identityKeys.map(key => altAccStatusMap[key]).find(Boolean);
+
+            if (dbOwnership === "取得" || hasHighRarityMainOwned) {
+                c.computedOwnership = "取得";
+            } else if (altAccOwnership) {
+                c.computedOwnership = altAccOwnership;
             } else {
                 c.computedOwnership = dbOwnership;
             }

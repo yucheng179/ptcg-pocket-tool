@@ -115,6 +115,7 @@ function formatDisplayCardName(name) {
   let trimmedName = (name || "").trim();
   trimmedName = normalizeRegionalFormSpacing(trimmedName);
   trimmedName = trimmedName.replace(/^厄鬼椪(碧草面具|火灶面具|水井面具|礎石面具)/, "厄鬼椪 $1");
+  trimmedName = trimmedName.replace(/^飄浮泡泡(太陽|雨水|雪雲|一般)/, "飄浮泡泡 $1");
   const megaMatch = trimmedName.match(/^超級(.+)ex$/);
   if (megaMatch) return `Mega${megaMatch[1]}`;
   if (trimmedName.endsWith("ex")) return `${trimmedName.slice(0, -2)}EX`;

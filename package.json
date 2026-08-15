@@ -2,10 +2,13 @@
   "scripts": {
     "crawl:cards": "node crawler/raenonx-cards.mjs",
     "sync:cards": "node crawler/sync-ptcg-cards-from-catalog.mjs",
-    "sync:cards:dry-run": "node crawler/sync-ptcg-cards-from-catalog.mjs --dry-run"
+    "sync:cards:dry-run": "node crawler/sync-ptcg-cards-from-catalog.mjs --dry-run",
+    "backfill:sections": "node crawler/backfill-ptcg-card-sections.mjs",
+    "backfill:sections:dry-run": "node crawler/backfill-ptcg-card-sections.mjs --dry-run"
   },
   "dependencies": {
     "firebase": "^10.11.0",
+    "firebase-admin": "^12.7.0",
     "playwright": "^1.62.0"
   }
 }

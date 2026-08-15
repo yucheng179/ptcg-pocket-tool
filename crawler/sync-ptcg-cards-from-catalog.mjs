@@ -1,13 +1,6 @@
 import fs from "node:fs/promises";
-import { initializeApp } from "firebase/app";
-import {
-  collection,
-  doc,
-  getDocs,
-  getFirestore,
-  terminate,
-  writeBatch
-} from "firebase/firestore";
+import { applicationDefault, cert, deleteApp, initializeApp } from "firebase-admin/app";
+import { getFirestore } from "firebase-admin/firestore";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBdT8oG7bjqOIZlnjEvkoxBz1GTlTx4s-k",
@@ -22,14 +15,41 @@ const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const batchSize = 450;
 const catalogJsonPath = "crawler/raenonx-cards.json";
+const serviceAccountPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
+  || process.env.FIREBASE_SERVICE_ACCOUNT_KEY
+  || "crawler/service-account-key.json";
 const legacyRarityMap = {
   "1彩星": "1閃",
   "2彩星": "2閃"
 };
 
-const app = initializeApp(firebaseConfig);
+async function getFirebaseAdminCredential() {
+  if (process.env.FIREBASE_USE_APPLICATION_DEFAULT === "true") {
+    console.log("Using Firebase Admin Application Default Credentials.");
+    return applicationDefault();
+  }
+
+  try {
+    const rawKey = await fs.readFile(serviceAccountPath, "utf8");
+    console.log(`Using Firebase Admin service account: ${serviceAccountPath}`);
+    return cert(JSON.parse(rawKey));
+  } catch (error) {
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS || process.env.FIREBASE_SERVICE_ACCOUNT_KEY) {
+      throw new Error(`Unable to read Firebase service account key at ${serviceAccountPath}: ${error.message}`);
+    }
+
+    throw new Error(
+      `Missing Firebase Admin credentials. Download a service account key from Firebase Console and save it as ${serviceAccountPath}, or set GOOGLE_APPLICATION_CREDENTIALS to the key path.`
+    );
+  }
+}
+
+const app = initializeApp({
+  credential: await getFirebaseAdminCredential(),
+  projectId: firebaseConfig.projectId
+});
 const db = getFirestore(app);
-const cardsCollection = collection(db, "ptcg_cards");
+const cardsCollection = db.collection("ptcg_cards");
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -394,7 +414,7 @@ function getTopLevelUpdates(data, catalogById, catalogByCardId, catalogByNameIma
 
 async function commitOperations(operations) {
   for (let i = 0; i < operations.length; i += batchSize) {
-    const batch = writeBatch(db);
+    const batch = db.batch();
     const chunk = operations.slice(i, i + batchSize);
 
     chunk.forEach(operation => {
@@ -421,11 +441,11 @@ const catalogByNameImage = getCatalogByNameImage(catalogCards);
 
 if (catalogById.size === 0) {
   console.log(`No catalog cards found in ${catalogJsonPath}. Run: node crawler\\raenonx-cards.mjs`);
-  await terminate(db);
+  await deleteApp(app);
   process.exit(1);
 }
 
-const cardsSnapshot = await getDocs(cardsCollection);
+const cardsSnapshot = await cardsCollection.get();
 const operations = [];
 const samples = [];
 const unmatchedTopLevelCards = [];
@@ -481,7 +501,7 @@ cardsSnapshot.docs.forEach(documentSnapshot => {
   if (Object.keys(updates).length === 0) return;
 
   operations.push({
-    ref: doc(cardsCollection, documentSnapshot.id),
+    ref: cardsCollection.doc(documentSnapshot.id),
     updates
   });
 
@@ -538,4 +558,4 @@ if (!dryRun) {
 }
 
 console.log("Done.");
-await terminate(db);
+await deleteApp(app);

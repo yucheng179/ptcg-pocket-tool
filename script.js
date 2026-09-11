@@ -58,7 +58,7 @@ let metaLobbyTabClickTimer = null;
 let draggedGeneralTagName = null;
 const AUTO_TEAM_LOBBY_TAB_ID = "auto-team";
 const DEFAULT_24H_VERSION_TAB_ID = "b4";
-let active24hVersionTabId = DEFAULT_24H_VERSION_TAB_ID;
+let active24hVersionTabId = null;
 let challenge24hTabClickTimer = null;
 let draggedChallenge24hTabId = null;
 let currentAuthUser = null;
@@ -429,12 +429,18 @@ function getChallenge24hVersionTabs() {
         : [{ id: DEFAULT_24H_VERSION_TAB_ID, name: "B4" }];
 }
 
+function getLatestChallenge24hVersionTabId(tabs = getChallenge24hVersionTabs()) {
+    return tabs.at(-1)?.id || DEFAULT_24H_VERSION_TAB_ID;
+}
+
 function getChallenge24hCardVersionTabId(card) {
     return card.challenge24hData?.versionTabId || DEFAULT_24H_VERSION_TAB_ID;
 }
 
 function getChallenge24hVersionTabName(tabId = active24hVersionTabId) {
-    return getChallenge24hVersionTabs().find(tab => tab.id === tabId)?.name || "B4";
+    const tabs = getChallenge24hVersionTabs();
+    const fallbackTabId = tabId || getLatestChallenge24hVersionTabId(tabs);
+    return tabs.find(tab => tab.id === fallbackTabId)?.name || "B4";
 }
 
 function getChallenge24hImportExpansionOptions() {
@@ -3049,7 +3055,7 @@ async function deleteChallenge24hVersionTab(tab, tabs) {
     }
 
     const updatedTabs = tabs.filter(item => item.id !== tab.id);
-    if (active24hVersionTabId === tab.id) active24hVersionTabId = updatedTabs[0]?.id || DEFAULT_24H_VERSION_TAB_ID;
+    if (active24hVersionTabId === tab.id) active24hVersionTabId = getLatestChallenge24hVersionTabId(updatedTabs);
     await saveChallenge24hVersionTabs(updatedTabs);
 }
 
@@ -3622,7 +3628,7 @@ function render24hRows() {
     rarityRowsContainer24h.innerHTML = "";
     const versionTabs = getChallenge24hVersionTabs();
     if (!versionTabs.some(tab => tab.id === active24hVersionTabId)) {
-        active24hVersionTabId = versionTabs[0]?.id || DEFAULT_24H_VERSION_TAB_ID;
+        active24hVersionTabId = getLatestChallenge24hVersionTabId(versionTabs);
     }
     renderChallenge24hTabs(versionTabs);
     rarities24h.forEach(rarity => {

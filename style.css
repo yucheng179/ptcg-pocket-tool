@@ -585,7 +585,11 @@ header { display: flex; justify-content: space-between; align-items: center; mar
    ========================================= */
 .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
 .modal.show { display: flex; }
-.modal-content { background: white; padding: 30px; border-radius: 12px; width: 380px; position: relative; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+.modal-content { background: white; padding: 30px; border-radius: 12px; width: 380px; max-height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; scrollbar-gutter: stable; position: relative; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+.modal-content::-webkit-scrollbar { width: 10px; }
+.modal-content::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 10px; }
+.modal-content::-webkit-scrollbar-thumb { background: #c7cdd4; border-radius: 10px; border: 2px solid #f1f3f5; }
+.modal-content::-webkit-scrollbar-thumb:hover { background: #9aa3ad; }
 .close-btn { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #999; }
 .input-group { margin-bottom: 15px; display: flex; flex-direction: column; position: relative; }
 .input-group label { font-size: 13px; font-weight: bold; margin-bottom: 5px; color: #555; }
@@ -853,6 +857,68 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .quick-tier-options { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 15px; }
 .tier-btn { border: none; padding: 8px 12px; border-radius: 8px; font-size: 14px; font-weight: bold; color: white; cursor: pointer; transition: transform 0.1s; width: 45%; }
 .tier-btn:hover { transform: scale(1.05); }
+
+.traded-card-preview {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+.traded-card-preview.show { display: flex; }
+.traded-card-preview img {
+    width: 44px;
+    height: 62px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+    background: #fff;
+}
+.traded-card-preview strong {
+    display: block;
+    color: #222;
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+.traded-card-preview span {
+    color: #777;
+    font-size: 12px;
+}
+.traded-card-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding: 6px;
+    border-top: 1px dashed #d8d8d8;
+    color: #555;
+    font-size: 12px;
+    text-align: left;
+}
+.traded-card-chip img {
+    width: 28px;
+    height: 39px;
+    margin: 0;
+    border-radius: 3px;
+    flex: 0 0 auto;
+}
+.traded-card-chip strong {
+    display: block;
+    color: #222;
+    font-size: 12px;
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.traded-card-chip span {
+    display: block;
+    color: #777;
+    font-size: 11px;
+}
 
 /* =========================================
    🪄 自訂圖片智慧選單 (Autocomplete Dropdown)

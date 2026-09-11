@@ -245,6 +245,15 @@
                         <option value="無" selected>無 (未評級)</option>
                     </select>
                 </div>
+
+                <div class="input-group" id="group-traded-card" style="display: none; position: relative;">
+                    <label>交換的卡：</label>
+                    <input type="text" id="card-traded-name" placeholder="搜尋交換到/換出的卡片" autocomplete="off">
+                    <input type="hidden" id="card-traded-id">
+                    <input type="hidden" id="card-traded-img">
+                    <div id="traded-card-autocomplete-list" class="autocomplete-dropdown"></div>
+                    <div id="traded-card-preview" class="traded-card-preview"></div>
+                </div>
                 
                 <div class="input-group" id="group-rarity">
                     <label>稀有度：</label>

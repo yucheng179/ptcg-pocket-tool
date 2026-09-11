@@ -93,7 +93,8 @@ const raritiesNeededMissing = [
     { name: "2菱", icon: "https://img.game8.co/3995615/ef7758a60d9c9d1871eca629c203b81e.png/show" },
     { name: "3菱", icon: "https://img.game8.co/3995616/740cd3cbff061c16c8e5d8eea939bb59.png/show" }, 
     { name: "4菱", icon: "https://img.game8.co/3995617/622e1c0cca9ffdaa43cdd588b8e18d78.png/show" },
-    { name: "1星", icon: "https://img.game8.co/3994721/895579e1516f605b7882b0909f329b7e.png/show" }
+    { name: "1星", icon: "https://img.game8.co/3994721/895579e1516f605b7882b0909f329b7e.png/show" },
+    { name: "1閃", icon: "https://img.game8.co/4137129/6510d1633ee489b2e8fcba939d7e99cb.png/show" }
 ];
 
 const raritiesNeededGold = [
@@ -379,6 +380,10 @@ function getAutocompleteMatches(filterText = "", context = null, limit = AUTOCOM
 
 function addCardRecordToAutocompleteDict(card = {}) {
     addUniqueCardToDict(card);
+
+    if (card.twoStarData?.tradedCard) {
+        addUniqueCardToDict(card.twoStarData.tradedCard);
+    }
 
     if (card.section !== "meta_deck" || !card.deckData) return;
 
@@ -837,6 +842,34 @@ function renderQtyControl(qty) {
             <button class="qty-btn qty-minus" title="減少數量">-</button>
             <span class="qty-number">${qty}</span>
             <button class="qty-btn qty-plus" title="增加數量">+</button>
+        </div>
+    `;
+}
+
+function getTradedCardFromForm() {
+    return {
+        name: document.getElementById("card-traded-name")?.value.trim() || "",
+        id: document.getElementById("card-traded-id")?.value.trim() || "",
+        imageUrl: document.getElementById("card-traded-img")?.value.trim() || ""
+    };
+}
+
+function renderTradedCardPreview(tradedCard = {}) {
+    const name = tradedCard.name || "";
+    const id = tradedCard.id || "";
+    const imageUrl = tradedCard.imageUrl || tradedCard.img || "";
+    if (!name && !id && !imageUrl) return "";
+
+    const displayName = name || "(未命名)";
+    const displayImg = imageUrl || "https://placehold.co/60x84/eaeaea/999999?text=X";
+
+    return `
+        <div class="traded-card-chip" title="交換的卡">
+            <img src="${displayImg}" onerror="this.src='https://placehold.co/60x84/eaeaea/999999?text=X'">
+            <div>
+                <span>交換的卡</span>
+                <strong>${displayName}</strong>
+            </div>
         </div>
     `;
 }
@@ -3273,6 +3306,9 @@ function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, r
         const displayName = card.name ? card.name : "<span style='color:#ccc'>(未命名)</span>";
         const displayId = card.id ? `# ${card.id}` : "<span style='color:#ccc'>(無編號)</span>";
         const qty = getCardQuantity(card);
+        const tradedCardHtml = currentTwoStarTab === "被交換的"
+            ? renderTradedCardPreview(card.twoStarData?.tradedCard)
+            : "";
 
         let quickTierBtnHtml = "";
         let tierBadgeHtml = "";
@@ -3303,6 +3339,7 @@ function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, r
                 ${displayId}
                 ${tierBadgeHtml}
                 ${renderQtyControl(qty)}
+                ${tradedCardHtml}
             </div>
             <button class="del-card-btn" title="刪除卡片">✕</button>
             <button class="copy-card-btn" title="複製卡片">📄</button>
@@ -3760,6 +3797,7 @@ function updateHighRarityTypeVisibility() {
     document.getElementById("group-two-star-status").style.display = selectedTab === "擁有的卡" ? "flex" : "none";
     document.getElementById("group-two-star-type").style.display =
         selectedTab !== "擁有的卡" && rarityVal === "2星" ? "flex" : "none";
+    document.getElementById("group-traded-card").style.display = selectedTab === "被交換的" ? "flex" : "none";
 }
 
 function setupModalFields() {
@@ -3778,8 +3816,9 @@ function setupModalFields() {
     const groupTwoStarStatus = document.getElementById("group-two-star-status");
     const groupTwoStarType = document.getElementById("group-two-star-type");
     const groupTwoStarTier = document.getElementById("group-two-star-tier");
+    const groupTradedCard = document.getElementById("group-traded-card");
 
-    [groupAccType, groupHasMain, groupOwnership, groupNeededQty, groupNeededTab, groupGeneralType, groupGeneralSubtype, groupGeneralTag, groupTwoStarTab, groupTwoStarStatus, groupTwoStarType, groupTwoStarTier].forEach(g => g.style.display = "none");
+    [groupAccType, groupHasMain, groupOwnership, groupNeededQty, groupNeededTab, groupGeneralType, groupGeneralSubtype, groupGeneralTag, groupTwoStarTab, groupTwoStarStatus, groupTwoStarType, groupTwoStarTier, groupTradedCard].forEach(g => g.style.display = "none");
     
     groupRarity.style.display = "flex"; 
 
@@ -3806,6 +3845,9 @@ function setupModalFields() {
 document.getElementById("card-rarity").addEventListener("change", () => {
     updateTierFieldVisibility();
     updateHighRarityTypeVisibility();
+    if (tradedCardAutocompleteList?.classList.contains("show")) {
+        renderTradedCardAutocomplete(tradedCardNameInput?.value.trim() || "");
+    }
 });
 
 generalTagNameInput.addEventListener("focus", showGeneralTagOptions);
@@ -3836,6 +3878,7 @@ cardForm.addEventListener("keydown", (event) => {
     if (event.isComposing) return;
     if (event.target.tagName === "TEXTAREA") return;
     if (autocompleteList.classList.contains("show")) return;
+    if (tradedCardAutocompleteList?.classList.contains("show")) return;
     event.preventDefault();
     cardForm.requestSubmit();
 });
@@ -3861,6 +3904,7 @@ function openNewModal(rarityName, typeName = null, hasMainVal = null) {
     generalTagNameInput.value = "";
     generalTagColorInput.value = "#787774";
     renderGeneralTagList();
+    clearTradedCardForm();
     
     document.getElementById("card-two-star-tab").value = currentTwoStarTab;
     document.getElementById("card-two-star-tier").value = "無"; 
@@ -3911,6 +3955,7 @@ function openEditModal(docId) {
         document.getElementById("card-two-star-status").value = card.twoStarData?.status || "主帳";
         document.getElementById("card-two-star-type").value = card.twoStarData?.type || "支援者";
         document.getElementById("card-two-star-tier").value = card.twoStarData?.tier || "無";
+        fillTradedCardForm(card.twoStarData?.tradedCard || {});
 
         const originalSection = currentSection; 
         currentSection = card.section || "alt_acc";
@@ -3986,6 +4031,12 @@ cardForm.addEventListener("submit", async (e) => {
         };
         if (cardObj.twoStarData.tab === "擁有的卡" || rarityInput === "2星") {
             cardObj.twoStarData.type = document.getElementById("card-two-star-type").value;
+        }
+        if (cardObj.twoStarData.tab === "被交換的") {
+            const tradedCard = getTradedCardFromForm();
+            if (tradedCard.name || tradedCard.id || tradedCard.imageUrl) {
+                cardObj.twoStarData.tradedCard = tradedCard;
+            }
         }
     } else {
         const existingQty = editingCardDocId ? getCardQuantity(cardsData.find(c => c.docId === editingCardDocId) || {}) : 1;
@@ -4356,6 +4407,102 @@ function renderAutocomplete(filterText = "") {
 cardNameInput.addEventListener("input", (e) => renderAutocomplete(e.target.value.trim()));
 cardNameInput.addEventListener("focus", (e) => renderAutocomplete(e.target.value.trim()));
 
+const tradedCardNameInput = document.getElementById("card-traded-name");
+const tradedCardAutocompleteList = document.getElementById("traded-card-autocomplete-list");
+const tradedCardPreview = document.getElementById("traded-card-preview");
+
+function updateTradedCardPreview() {
+    if (!tradedCardPreview) return;
+    const tradedCard = getTradedCardFromForm();
+    const imageUrl = tradedCard.imageUrl || "";
+
+    if (!tradedCard.name && !tradedCard.id && !imageUrl) {
+        tradedCardPreview.classList.remove("show");
+        tradedCardPreview.innerHTML = "";
+        return;
+    }
+
+    const displayImg = imageUrl || "https://placehold.co/60x84/eaeaea/999999?text=X";
+    const displayName = tradedCard.name || "(未命名)";
+    const displayId = tradedCard.id ? `#${tradedCard.id}` : "(無編號)";
+    tradedCardPreview.innerHTML = `
+        <img src="${displayImg}" onerror="this.src='https://placehold.co/60x84/eaeaea/999999?text=X'">
+        <div>
+            <strong>${displayName}</strong>
+            <span>${displayId}</span>
+        </div>
+    `;
+    tradedCardPreview.classList.add("show");
+}
+
+function clearTradedCardForm() {
+    if (tradedCardNameInput) tradedCardNameInput.value = "";
+    document.getElementById("card-traded-id").value = "";
+    document.getElementById("card-traded-img").value = "";
+    if (tradedCardAutocompleteList) {
+        tradedCardAutocompleteList.classList.remove("show");
+        tradedCardAutocompleteList.innerHTML = "";
+    }
+    updateTradedCardPreview();
+}
+
+function fillTradedCardForm(card = {}) {
+    if (tradedCardNameInput) tradedCardNameInput.value = card.name || "";
+    document.getElementById("card-traded-id").value = card.id || "";
+    document.getElementById("card-traded-img").value = card.imageUrl || card.img || "";
+    updateTradedCardPreview();
+}
+
+function getTradedCardAutocompleteContext() {
+    const rarity = document.getElementById("card-rarity")?.value;
+    return rarity ? { rarities: [rarity] } : null;
+}
+
+function renderTradedCardAutocomplete(filterText = "") {
+    if (!tradedCardAutocompleteList || !tradedCardNameInput) return;
+    tradedCardAutocompleteList.innerHTML = "";
+    const matchedCards = getAutocompleteMatches(filterText, getTradedCardAutocompleteContext());
+
+    if (matchedCards.length === 0) {
+        tradedCardAutocompleteList.classList.remove("show");
+        return;
+    }
+
+    matchedCards.forEach(({ name, data: dictData }) => {
+        const itemDiv = document.createElement("div");
+        itemDiv.className = "autocomplete-item";
+        const imgUrl = dictData.imageUrl || "https://placehold.co/60x84/eaeaea/999999?text=X";
+        const displayId = dictData.id ? `#${dictData.id}` : "(無編號)";
+        itemDiv.innerHTML = `
+            <img src="${imgUrl}" onerror="this.src='https://placehold.co/60x84/eaeaea/999999?text=X'">
+            <div class="ac-details">
+                <span class="ac-name">${name}</span>
+                <span class="ac-id">${displayId}</span>
+            </div>
+        `;
+        itemDiv.addEventListener("mousedown", (event) => {
+            event.preventDefault();
+            fillTradedCardForm({
+                name,
+                id: dictData.id || "",
+                imageUrl: dictData.imageUrl || ""
+            });
+            tradedCardAutocompleteList.classList.remove("show");
+            tradedCardAutocompleteList.innerHTML = "";
+        });
+        tradedCardAutocompleteList.appendChild(itemDiv);
+    });
+    tradedCardAutocompleteList.classList.add("show");
+}
+
+tradedCardNameInput?.addEventListener("input", (event) => {
+    document.getElementById("card-traded-id").value = "";
+    document.getElementById("card-traded-img").value = "";
+    updateTradedCardPreview();
+    renderTradedCardAutocomplete(event.target.value.trim());
+});
+tradedCardNameInput?.addEventListener("focus", (event) => renderTradedCardAutocomplete(event.target.value.trim()));
+
 // 🪄 牌組加卡表單的智慧選單
 const deckCardNameInput = document.getElementById("deck-card-name");
 const deckAutocompleteList = document.getElementById("deck-autocomplete-list");
@@ -4533,6 +4680,7 @@ document.addEventListener("click", (e) => {
     if (!e.target.closest(".deck-tab-wrapper")) closeTabActionMenus();
     if (e.target !== cardNameInput && !autocompleteList.contains(e.target)) autocompleteList.classList.remove('show');
     if (e.target !== deckCardNameInput && !deckAutocompleteList.contains(e.target)) deckAutocompleteList.classList.remove('show');
+    if (tradedCardNameInput && e.target !== tradedCardNameInput && !tradedCardAutocompleteList.contains(e.target)) tradedCardAutocompleteList.classList.remove("show");
     if (deckMainCoverNameInput && e.target !== deckMainCoverNameInput && !deckMainCoverAutocompleteList.contains(e.target)) deckMainCoverAutocompleteList.classList.remove('show');
     if (e.target !== deckCoverNameInput && !deckCoverAutocompleteList.contains(e.target)) deckCoverAutocompleteList.classList.remove('show');
     if (e.target !== deckReplacementNameInput && !deckReplacementAutocompleteList.contains(e.target)) deckReplacementAutocompleteList.classList.remove('show');

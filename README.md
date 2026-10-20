@@ -18,6 +18,7 @@
   - 支援牌組卡片新增、編輯、複製、拖曳排序
   - 支援可替換卡區塊
   - 支援文字格式匯入牌組
+  - 各牌組分頁可用屬性圖示選擇能量，自動產生藍色漸層圓點牌組二維條碼、放大預覽與下載 PNG
 
 - **需要卡**
   - 依稀有度管理缺少的卡與金邊卡
@@ -57,6 +58,8 @@
 - Firebase Hosting
 - Node.js crawler scripts
 - Playwright
+
+牌組 QR 使用 [tcgp-deck-qr](https://github.com/KevinGutowski/tcgp-deck-qr)（MIT），固定版本與授權位於 `vendor/tcgp-deck-qr/`。條碼在瀏覽器中產生，使用圖鑑的卡片代碼；`energyTypes` 儲存在各牌組的 `deckData.tabs` 分頁內。未設定能量時，預設使用牌組封面的主屬性；龍系、無色需手動選擇。牌組須為 20 張，同名至多 2 張，並選擇 1 至 3 種能量。條碼不保證保留特定稀有度或卡面。下載圖示採用 [Lucide](https://lucide.dev/)，授權位於 `vendor/lucide/LICENSE`。
 
 ## 專案結構
 

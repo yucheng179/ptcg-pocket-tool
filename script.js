@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js";
 import { getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, writeBatch } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore.js";
 import { browserLocalPersistence, getAuth, GoogleAuthProvider, getRedirectResult, onAuthStateChanged, setPersistence, signInWithPopup, signInWithRedirect, signOut } from "https://www.gstatic.com/firebasejs/10.11.0/firebase-auth.js";
+import { buildDeckQrData, drawDeckQrCanvas, energyOptions, getDeckQrEnergyTypes, loadDeckQrLibrary } from "./deck-qr.mjs";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBdT8oG7bjqOIZlnjEvkoxBz1GTlTx4s-k",
@@ -63,6 +64,7 @@ let challenge24hTabClickTimer = null;
 let draggedChallenge24hTabId = null;
 let currentAuthUser = null;
 let unsubscribeCardsSnapshot = null;
+let deckQrRenderVersion = 0;
 
 // --- 常數定義 ---
 const catalogExpansionIds = [
@@ -72,7 +74,6 @@ const catalogExpansionIds = [
 const catalogPromoExpansionIds = ["PROMO-A", "PROMO-B"];
 
 const raritiesAlt = [
-    { name: "4菱", icon: "https://img.game8.co/3995617/622e1c0cca9ffdaa43cdd588b8e18d78.png/show" },
     { name: "1星", icon: "https://img.game8.co/3994721/895579e1516f605b7882b0909f329b7e.png/show" },
     { name: "2星", icon: "https://img.game8.co/3995618/7d3d7e80340fe6f678a9fbd34193cae6.png/show" },
     { name: "3星", icon: "https://img.game8.co/3995619/a0d611ce374e3070c530ee8d3fd81efa.png/show" },
@@ -1105,6 +1106,7 @@ function buildDefaultNewDeckTabs(deckData) {
         coverCard,
         coverImg: coverCard.img,
         cards: cloneDeckCards(defaultCards),
+        energyTypes: getDeckQrEnergyTypes({}, deckData.attribute),
         replacements: []
     }];
 }
@@ -1146,6 +1148,7 @@ function getDeckTabs(deck) {
                 coverCard,
                 coverImg: coverCard.img,
                 cards: Array.isArray(tab.cards) ? tab.cards : [],
+                energyTypes: getDeckQrEnergyTypes(tab, deck?.deckData?.attribute),
                 replacements: Array.isArray(tab.replacements) ? tab.replacements : []
             };
         });
@@ -1158,6 +1161,7 @@ function getDeckTabs(deck) {
         coverCard,
         coverImg: coverCard.img,
         cards: Array.isArray(deck?.deckData?.cards) ? deck.deckData.cards : [],
+        energyTypes: getDeckQrEnergyTypes({}, deck?.deckData?.attribute),
         replacements: []
     }];
 }
@@ -2256,6 +2260,7 @@ function renderMetaDeckDetail() {
     detailDeckCover.src = activeTab.coverCard?.img || activeTab.coverImg || deck.deckData?.coverImg || "https://placehold.co/300x420/eaeaea/999999?text=Cover";
     renderDeckTabCoverEditor(deck, tabs, activeTab);
     renderDeckTabsBar(deck, tabs, activeTab);
+    renderDeckQrCode(deck, activeTab);
 
     deckRowTypes.forEach(rowType => {
         const rowCards = currentCards
@@ -2558,6 +2563,108 @@ function renderDeckTabCoverEditor(deck, tabs, activeTab) {
     detailDeckCover.ondblclick = () => openDeckCoverModal(deck, activeTab);
 }
 
+async function renderDeckQrCode(deck, activeTab) {
+    const host = document.getElementById("detail-deck-qr");
+    const renderVersion = ++deckQrRenderVersion;
+    const energyTypes = activeTab.energyTypes || [];
+    host.innerHTML = `
+        <div class="deck-qr-heading">
+            <h3>牌組二維條碼</h3>
+            <button type="button" class="deck-qr-download" title="下載 PNG" aria-label="下載牌組二維條碼 PNG" disabled>
+                <img src="vendor/lucide/download.svg" alt="" width="22" height="22" aria-hidden="true">
+            </button>
+        </div>
+        <fieldset class="deck-qr-energy">
+            <legend>能量</legend>
+            ${energyOptions.map(option => `
+                <label class="deck-qr-energy-option" title="${option.label}能量">
+                    <input type="checkbox" aria-label="${option.label}能量" value="${option.value}" ${energyTypes.includes(option.value) ? "checked" : ""}>
+                    <img src="${deckAttributeMeta[option.label].icon}" alt="" width="30" height="30" aria-hidden="true">
+                </label>
+            `).join("")}
+        </fieldset>
+        <div class="deck-qr-preview"><p class="deck-qr-status" role="status"></p></div>
+    `;
+    const fieldset = host.querySelector("fieldset");
+    const preview = host.querySelector(".deck-qr-preview");
+    const status = host.querySelector(".deck-qr-status");
+    const download = host.querySelector(".deck-qr-download");
+    fieldset.addEventListener("change", async event => {
+        const selected = Array.from(fieldset.querySelectorAll("input:checked"), input => Number(input.value));
+        if (selected.length > 3) {
+            event.target.checked = false;
+            return;
+        }
+        fieldset.disabled = true;
+        const currentDeck = cardsData.find(card => card.docId === deck.docId);
+        if (!currentDeck) {
+            fieldset.disabled = false;
+            return;
+        }
+        const tabs = getDeckTabs(currentDeck);
+        const updatedTabs = tabs.map(tab => tab.id === activeTab.id ? { ...tab, energyTypes: selected } : tab);
+        try {
+            await saveDeckTabs(currentDeck, updatedTabs);
+        } catch (error) {
+            console.error("Deck QR energy save failed:", error);
+            fieldset.querySelectorAll("input").forEach(input => {
+                input.checked = energyTypes.includes(Number(input.value));
+            });
+            alert("能量儲存失敗，請稍後再試。");
+        } finally {
+            fieldset.disabled = false;
+        }
+    });
+
+    let data;
+    try {
+        data = buildDeckQrData(activeTab.cards || [], catalogCardsData, energyTypes);
+    } catch (error) {
+        status.textContent = error.message;
+        return;
+    }
+    status.textContent = "產生中...";
+    try {
+        const { encodePayload, createQrMatrix } = await loadDeckQrLibrary();
+        if (renderVersion !== deckQrRenderVersion || activeMetaDeckId !== deck.docId || activeDeckTabId !== activeTab.id) return;
+        const matrix = createQrMatrix(encodePayload(data));
+        const canvas = document.createElement("canvas");
+        drawDeckQrCanvas(canvas, matrix);
+        const pngUrl = canvas.toDataURL("image/png");
+        const enlarge = document.createElement("button");
+        enlarge.type = "button";
+        enlarge.className = "deck-qr-enlarge";
+        enlarge.title = "放大牌組二維條碼";
+        const image = document.createElement("img");
+        image.src = pngUrl;
+        image.alt = `${deck.deckData?.name || "牌組"} / ${activeTab.name} 二維條碼`;
+        image.width = image.height = canvas.width;
+        enlarge.appendChild(image);
+        enlarge.addEventListener("click", () => {
+            document.getElementById("lightbox-img").src = pngUrl;
+            document.getElementById("lightbox-modal").classList.add("show");
+        });
+        preview.replaceChildren(enlarge);
+        download.disabled = false;
+        download.addEventListener("click", () => {
+            const link = document.createElement("a");
+            link.href = pngUrl;
+            link.download = `${deck.deckData?.name || "牌組"}-${activeTab.name}-QR.png`.replace(/[<>:"/\\|?*]/g, "_");
+            link.click();
+        });
+    } catch (error) {
+        if (renderVersion !== deckQrRenderVersion) return;
+        console.error("Deck QR generation failed:", error);
+        status.textContent = "二維條碼載入失敗";
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "btn-secondary";
+        retry.textContent = "重試";
+        retry.addEventListener("click", () => renderDeckQrCode(deck, activeTab));
+        preview.appendChild(retry);
+    }
+}
+
 function closeTabActionMenus() {
     document.querySelectorAll(".meta-lobby-tab-actions").forEach(menu => menu.remove());
 }
@@ -2719,6 +2826,7 @@ function renderDeckTabsBar(deck, tabs, activeTab) {
             coverCard: { ...(activeTab.coverCard || { name: "", img: activeTab.coverImg || deck.deckData?.coverImg || "" }) },
             coverImg: activeTab.coverCard?.img || activeTab.coverImg || deck.deckData?.coverImg || "",
             cards: cloneDeckCards(activeTab.cards || []),
+            energyTypes: [...(activeTab.energyTypes || [])],
             replacements: cloneDeckReplacements(activeTab.replacements || [])
         };
         activeDeckTabId = newTab.id;
@@ -3645,8 +3753,48 @@ function render24hRows() {
             <div class="rarity-header">
                 <img src="${rarity.icon}" alt="${rarity.name}">
                 <span>${rarity.name} <span class="rarity-count">${ownedCount} / ${targetCards.length}</span></span>
+                <button type="button" class="challenge-24h-mark-all-btn" ${targetCards.length === 0 ? "disabled" : ""}>
+                    ${targetCards.length === 0 ? "沒有卡片" : "全部取得"}
+                </button>
             </div>
         `;
+
+        const markAllButton = rowBlock.querySelector(".challenge-24h-mark-all-btn");
+        markAllButton.addEventListener("keydown", event => event.stopPropagation());
+        markAllButton.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            const cardsToUpdate = targetCards.filter(card => card.challenge24hData?.ownership !== "取得");
+            if (cardsToUpdate.length === 0) {
+                markAllButton.textContent = "已全部取得";
+                markAllButton.disabled = true;
+                return;
+            }
+
+            markAllButton.disabled = true;
+            markAllButton.textContent = "更新中...";
+            try {
+                for (let i = 0; i < cardsToUpdate.length; i += 450) {
+                    const batch = writeBatch(db);
+                    cardsToUpdate.slice(i, i + 450).forEach(card => {
+                        batch.update(doc(db, "ptcg_cards", card.docId), {
+                            "challenge24hData.ownership": "取得",
+                            section: "24h"
+                        });
+                    });
+                    await batch.commit();
+                }
+            } catch (error) {
+                console.error("批次更新 24H 卡片狀態失敗：", error);
+                alert("更新失敗，請確認網路連線與資料庫權限後再試一次。");
+                markAllButton.disabled = false;
+                markAllButton.textContent = "全部取得";
+            }
+        });
+
+        if (targetCards.length > 0 && targetCards.every(card => card.challenge24hData?.ownership === "取得")) {
+            markAllButton.textContent = "已全部取得";
+            markAllButton.disabled = true;
+        }
 
         const cardsListDiv = document.createElement("div");
         cardsListDiv.className = "cards-horizontal-list";
@@ -4834,6 +4982,7 @@ async function loadCatalogCardsFromJson() {
         rebuildUniqueCardsDict(cardsData);
         if (currentSection === "card_catalog") renderCardCatalog();
         if (currentSection === "24h") render24hRows();
+        if (currentSection === "meta_decks" && activeMetaDeckId) renderMetaDeckDetail();
     } catch (error) {
         console.error("Catalog JSON load failed:", error);
         catalogCardsData = [];

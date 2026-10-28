@@ -42,6 +42,7 @@ let currentSection = "alt_acc";
 let currentAccountTab = "小帳";
 let currentNeededTab = "缺少的卡"; 
 let currentTwoStarTab = "擁有的卡"; 
+let currentGeneralTab = "通用";
 let editingCardDocId = null; 
 let draggedCardDocId = null; 
 let editingDeckDocId = null;
@@ -119,6 +120,22 @@ const typesGeneral = [
     { name: "競技場" },
     { name: "寶可夢" }
 ];
+const generalAttributes = ["草", "火", "水", "電", "超", "鬥", "惡", "鋼", "龍", "無"];
+const generalAttributeTypes = ["寶可夢", "支援者", "物品、道具、競技場"];
+
+function getGeneralCardTab(card) {
+    return card.generalData?.tab === "各屬性" ? "各屬性" : "通用";
+}
+
+function getGeneralAttributeCardType(type) {
+    return ["物品", "道具", "競技場", "物品與道具"].includes(type) ? "物品、道具、競技場" : type;
+}
+
+function getGeneralCardTagScope(card) {
+    return getGeneralCardTab(card) === "各屬性"
+        ? `各屬性:${card.generalData?.attribute || "草"}`
+        : card.generalData?.type || "支援者";
+}
 
 const generalTagColors = [
     { name: "預設", value: "#6c5ce7", bg: "#ece7ff" },
@@ -489,7 +506,7 @@ function getGeneralTagLibrary(typeName = getSelectedGeneralTagType()) {
     const normalizedType = normalizeTagName(typeName);
     cardsData.forEach(card => {
         if (card.section !== "general_cards") return;
-        if (normalizeTagName(card.generalData?.type || "") !== normalizedType) return;
+        if (normalizeTagName(getGeneralCardTagScope(card)) !== normalizedType) return;
         const tagName = (card.generalData?.tagName || "").trim();
         if (!tagName) return;
         const key = normalizeTagName(tagName);
@@ -507,6 +524,9 @@ function getGeneralTagColorMeta(color) {
 }
 
 function getSelectedGeneralTagType() {
+    if (document.getElementById("card-general-tab")?.value === "各屬性") {
+        return `各屬性:${document.getElementById("card-general-attribute").value}`;
+    }
     return document.getElementById("card-general-type")?.value || "支援者";
 }
 
@@ -689,7 +709,7 @@ async function syncSharedGeneralTagColor(tagName, tagColor, typeName, skipDocId 
     const cardsToUpdate = cardsData.filter(card =>
         card.section === "general_cards"
         && card.docId !== skipDocId
-        && normalizeTagName(card.generalData?.type || "") === normalizedTypeName
+        && normalizeTagName(getGeneralCardTagScope(card)) === normalizedTypeName
         && normalizeTagName(card.generalData?.tagName || "") === normalizedTagName
         && card.generalData?.tagColor !== tagColor
     );
@@ -705,14 +725,15 @@ async function syncSharedGeneralTagColor(tagName, tagColor, typeName, skipDocId 
 
 async function deleteGeneralTag(tagName, typeName) {
     if (!tagName) return;
-    const confirmed = confirm(`確定要刪除「${tagName}」標籤嗎？\n\n這會清空「${typeName}」區塊中所有使用此標籤的卡片。`);
+    const groupName = typeName.startsWith("各屬性:") ? `${typeName.slice("各屬性:".length)}屬性` : typeName;
+    const confirmed = confirm(`確定要刪除「${tagName}」標籤嗎？\n\n這會清空「${groupName}」區塊中所有使用此標籤的卡片。`);
     if (!confirmed) return;
 
     const normalizedTagName = normalizeTagName(tagName);
     const normalizedTypeName = normalizeTagName(typeName);
     const cardsToUpdate = cardsData.filter(card =>
         card.section === "general_cards"
-        && normalizeTagName(card.generalData?.type || "") === normalizedTypeName
+        && normalizeTagName(getGeneralCardTagScope(card)) === normalizedTypeName
         && normalizeTagName(card.generalData?.tagName || "") === normalizedTagName
     );
 
@@ -3490,9 +3511,36 @@ function createTwoStarRow(parentBlock, cards, filterVal, labelText, className, r
 // --- 渲染：泛用卡 ---
 function renderGeneralCardsRows() {
     rarityRowsContainerGeneral.innerHTML = "";
+    document.querySelectorAll(".general-tab-btn").forEach(tab => {
+        const active = tab.dataset.general === currentGeneralTab;
+        tab.classList.toggle("active", active);
+        tab.setAttribute("aria-selected", String(active));
+    });
+    const tabCards = cardsData.filter(card => card.section === "general_cards" && getGeneralCardTab(card) === currentGeneralTab);
+
+    if (currentGeneralTab === "各屬性") {
+        generalAttributes.forEach(attribute => {
+            const rowBlock = document.createElement("div");
+            rowBlock.className = "rarity-row-block general-attribute-block";
+            rowBlock.dataset.attribute = attribute;
+            rowBlock.innerHTML = `
+                <div class="rarity-header">
+                    <img src="${deckAttributeMeta[attribute].icon}" alt="">
+                    <span class="general-header-title">${attribute}</span>
+                </div>
+            `;
+            const targetCards = tabCards.filter(card => card.generalData?.attribute === attribute);
+            generalAttributeTypes.forEach(type => {
+                createHorizontalRowGeneral(rowBlock, targetCards, null, type, "general-attribute-row", type, attribute);
+            });
+            makeRarityBlockCollapsible(rowBlock, `general_cards:attribute:${attribute}`);
+            rarityRowsContainerGeneral.appendChild(rowBlock);
+        });
+        return;
+    }
     
     typesGeneral.forEach(typeObj => {
-        const targetCards = cardsData.filter(c => c.section === "general_cards" && c.generalData?.type === typeObj.name);
+        const targetCards = tabCards.filter(c => c.generalData?.type === typeObj.name);
         
         const rowBlock = document.createElement("div");
         rowBlock.className = "rarity-row-block";
@@ -3511,7 +3559,7 @@ function renderGeneralCardsRows() {
     });
 }
 
-function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, className, typeName) {
+function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, className, typeName, attribute = null) {
     const statusRow = document.createElement("div");
     statusRow.className = `status-row ${className}`;
     statusRow.innerHTML = `<div class="status-label">${labelText}</div>`;
@@ -3519,7 +3567,9 @@ function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, c
     const cardsListDiv = document.createElement("div");
     cardsListDiv.className = "cards-horizontal-list";
 
-    const filteredAndSorted = cards.filter(c => c.generalData?.hasOnMain === hasMainVal)
+    const filteredAndSorted = cards.filter(c => attribute
+        ? getGeneralAttributeCardType(c.generalData?.type) === typeName
+        : c.generalData?.hasOnMain === hasMainVal)
                                    .sort((a, b) => (a.generalData?.order || 0) - (b.generalData?.order || 0));
 
     filteredAndSorted.forEach(card => {
@@ -3578,7 +3628,7 @@ function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, c
         const tagHtml = renderGeneralCardTag(card);
 
         cardEl.innerHTML = `
-            <button class="toggle-main-btn" title="切換分類狀態">🔄</button>
+            ${attribute ? "" : '<button class="toggle-main-btn" title="切換分類狀態">🔄</button>'}
             <img src="${displayImg}" onerror="this.src='https://placehold.co/150x210/eaeaea/999999?text=Error'">
             <div class="card-info">
                 <strong>${displayName}</strong>
@@ -3590,7 +3640,7 @@ function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, c
             <button class="view-card-btn" title="放大預覽">🔍</button>
         `;
 
-        cardEl.querySelector('.toggle-main-btn').addEventListener('click', async (e) => {
+        cardEl.querySelector('.toggle-main-btn')?.addEventListener('click', async (e) => {
             e.stopPropagation(); 
             const newStatus = (card.generalData?.hasOnMain === "true") ? "false" : "true";
             await updateDoc(doc(db, "ptcg_cards", card.docId), { 
@@ -3609,7 +3659,7 @@ function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, c
     const inlineAddBtn = document.createElement("div");
     inlineAddBtn.className = "add-new-card-box";
     inlineAddBtn.innerHTML = `<span style="font-size: 28px; margin-bottom: 5px;">+</span><span>新增卡片</span>`;
-    inlineAddBtn.addEventListener("click", () => openNewModal(null, typeName, hasMainVal));
+    inlineAddBtn.addEventListener("click", () => openNewModal(null, typeName, hasMainVal, attribute));
     cardsListDiv.appendChild(inlineAddBtn);
 
     statusRow.appendChild(cardsListDiv);
@@ -3965,6 +4015,8 @@ function setupModalFields() {
     const groupGeneralType = document.getElementById("group-general-type");
     const groupGeneralSubtype = document.getElementById("group-general-subtype");
     const groupGeneralTag = document.getElementById("group-general-tag");
+    const groupGeneralTab = document.getElementById("group-general-tab");
+    const groupGeneralAttribute = document.getElementById("group-general-attribute");
 
     const groupTwoStarTab = document.getElementById("group-two-star-tab");
     const groupTwoStarStatus = document.getElementById("group-two-star-status");
@@ -3972,7 +4024,7 @@ function setupModalFields() {
     const groupTwoStarTier = document.getElementById("group-two-star-tier");
     const groupTradedCard = document.getElementById("group-traded-card");
 
-    [groupAccType, groupHasMain, groupOwnership, groupNeededQty, groupNeededTab, groupGeneralType, groupGeneralSubtype, groupGeneralTag, groupTwoStarTab, groupTwoStarStatus, groupTwoStarType, groupTwoStarTier, groupTradedCard].forEach(g => g.style.display = "none");
+    [groupAccType, groupHasMain, groupOwnership, groupNeededQty, groupNeededTab, groupGeneralType, groupGeneralSubtype, groupGeneralTag, groupGeneralTab, groupGeneralAttribute, groupTwoStarTab, groupTwoStarStatus, groupTwoStarType, groupTwoStarTier, groupTradedCard].forEach(g => g.style.display = "none");
     
     groupRarity.style.display = "flex"; 
 
@@ -3986,6 +4038,8 @@ function setupModalFields() {
         groupGeneralType.style.display = "flex";
         groupGeneralSubtype.style.display = "flex"; 
         groupGeneralTag.style.display = "flex";
+        groupGeneralTab.style.display = "flex";
+        updateGeneralCardFormFields();
         renderGeneralTagList();
     } else if (currentSection === "two_star_cards") {
         groupTwoStarTab.style.display = "flex";
@@ -3995,6 +4049,40 @@ function setupModalFields() {
         groupHasMain.style.display = "flex";
     }
 }
+
+function updateGeneralCardFormFields() {
+    const byAttribute = document.getElementById("card-general-tab").value === "各屬性";
+    const typeSelect = document.getElementById("card-general-type");
+    const previousType = typeSelect.value;
+    const types = byAttribute ? generalAttributeTypes : typesGeneral.map(type => type.name);
+    typeSelect.replaceChildren(...types.map(type => new Option(type, type)));
+    const nextType = byAttribute ? getGeneralAttributeCardType(previousType)
+        : previousType === "物品、道具、競技場" ? "物品" : previousType;
+    typeSelect.value = types.includes(nextType) ? nextType : (byAttribute ? "寶可夢" : "支援者");
+    document.getElementById("group-general-attribute").style.display = byAttribute ? "flex" : "none";
+    document.getElementById("group-general-subtype").style.display = byAttribute ? "none" : "flex";
+    updateGeneralCardAutocompleteContext();
+}
+
+function updateGeneralCardAutocompleteContext() {
+    if (currentSection !== "general_cards") return;
+    cardAutocompleteContext = getAutocompleteContextForCardForm(null, document.getElementById("card-general-type").value);
+    if (autocompleteList.classList.contains("show")) renderAutocomplete(cardNameInput.value.trim());
+}
+
+function resetGeneralCardTagSelection() {
+    generalTagNameInput.value = "";
+    generalTagColorInput.value = "#787774";
+    hideGeneralTagColorPopover();
+    renderGeneralTagList();
+}
+
+document.getElementById("card-general-tab").addEventListener("change", () => {
+    updateGeneralCardFormFields();
+    resetGeneralCardTagSelection();
+});
+
+document.getElementById("card-general-attribute").addEventListener("change", resetGeneralCardTagSelection);
 
 document.getElementById("card-rarity").addEventListener("change", () => {
     updateTierFieldVisibility();
@@ -4012,10 +4100,13 @@ generalTagNameInput.addEventListener("input", () => {
 });
 generalTagNameInput.addEventListener("change", syncGeneralTagColorFromName);
 document.getElementById("card-general-type").addEventListener("change", () => {
-    generalTagNameInput.value = "";
-    generalTagColorInput.value = "#787774";
-    hideGeneralTagColorPopover();
-    renderGeneralTagList();
+    updateGeneralCardAutocompleteContext();
+    if (document.getElementById("card-general-tab").value === "各屬性") {
+        hideGeneralTagColorPopover();
+        renderGeneralTagList();
+    } else {
+        resetGeneralCardTagSelection();
+    }
     if (generalTagList.classList.contains("show")) showGeneralTagOptions();
 });
 document.getElementById("group-general-tag").addEventListener("click", (event) => event.stopPropagation());
@@ -4037,16 +4128,19 @@ cardForm.addEventListener("keydown", (event) => {
     cardForm.requestSubmit();
 });
 
-function openNewModal(rarityName, typeName = null, hasMainVal = null) {
+function openNewModal(rarityName, typeName = null, hasMainVal = null, attribute = null) {
     editingCardDocId = null; 
     cardAutocompleteContext = getAutocompleteContextForCardForm(rarityName, typeName);
     modalTitle.innerText = "➕ 新增卡片資料";
     cardForm.reset(); 
+    document.getElementById("card-general-tab").value = currentGeneralTab;
+    document.getElementById("card-general-attribute").value = attribute || "草";
     setupModalFields();
 
     document.getElementById("card-acc-type").value = currentAccountTab;
     if (rarityName) document.getElementById("card-rarity").value = rarityName;
     if (typeName) document.getElementById("card-general-type").value = typeName;
+    updateGeneralCardAutocompleteContext();
     if (hasMainVal !== null) {
         document.getElementById("card-has-main").value = hasMainVal;
         document.getElementById("card-general-subtype").value = hasMainVal; 
@@ -4100,7 +4194,12 @@ function openEditModal(docId) {
         document.getElementById("card-ownership").value = card.challenge24hData?.ownership || "無";
         document.getElementById("card-needed-qty").value = card.neededCardsData?.quantity || "1";
         document.getElementById("card-needed-tab").value = card.neededCardsData?.tab || "缺少的卡";
-        document.getElementById("card-general-type").value = card.generalData?.type || "支援者";
+        document.getElementById("card-general-tab").value = getGeneralCardTab(card);
+        document.getElementById("card-general-attribute").value = card.generalData?.attribute || "草";
+        if (card.section === "general_cards") updateGeneralCardFormFields();
+        document.getElementById("card-general-type").value = getGeneralCardTab(card) === "各屬性"
+            ? getGeneralAttributeCardType(card.generalData?.type) || "寶可夢"
+            : card.generalData?.type || "支援者";
         generalTagNameInput.value = card.generalData?.tagName || "";
         generalTagColorInput.value = getGeneralTagColorMeta(card.generalData?.tagColor).value;
         renderGeneralTagList();
@@ -4114,6 +4213,9 @@ function openEditModal(docId) {
         const originalSection = currentSection; 
         currentSection = card.section || "alt_acc";
         setupModalFields();
+        if (card.section === "general_cards") {
+            cardAutocompleteContext = getAutocompleteContextForCardForm(null, document.getElementById("card-general-type").value);
+        }
         currentSection = originalSection; 
 
         const cardBg = card.bgColor || "#ffffff";
@@ -4167,6 +4269,9 @@ cardForm.addEventListener("submit", async (e) => {
     } else if (saveSection === "general_cards") {
         const tagName = generalTagNameInput.value.trim();
         cardObj.generalData = {
+            tab: document.getElementById("card-general-tab").value,
+            attribute: document.getElementById("card-general-tab").value === "各屬性"
+                ? document.getElementById("card-general-attribute").value : "",
             type: document.getElementById("card-general-type").value,
             hasOnMain: document.getElementById("card-general-subtype").value,
             tagName,
@@ -4242,7 +4347,7 @@ cardForm.addEventListener("submit", async (e) => {
     }
 
     if (saveSection === "general_cards" && cardObj.generalData?.tagName) {
-        await syncSharedGeneralTagColor(cardObj.generalData.tagName, cardObj.generalData.tagColor, cardObj.generalData.type, savedDocId);
+        await syncSharedGeneralTagColor(cardObj.generalData.tagName, cardObj.generalData.tagColor, getGeneralCardTagScope(cardObj), savedDocId);
     }
 
     formModal.classList.remove("show");
@@ -4860,6 +4965,13 @@ neededTabs.forEach(tab => {
         tab.classList.add("active");
         currentNeededTab = tab.getAttribute("data-needed");
         renderAllViews();
+    });
+});
+
+document.querySelectorAll(".general-tab-btn").forEach(tab => {
+    tab.addEventListener("click", () => {
+        currentGeneralTab = tab.dataset.general;
+        renderGeneralCardsRows();
     });
 });
 

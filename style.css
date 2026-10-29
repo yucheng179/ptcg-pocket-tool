@@ -116,6 +116,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .account-tabs { margin-bottom: 25px; border-bottom: 2px solid #ddd; display: flex; gap: 10px; }
 .tab-btn { background: none; border: none; padding: 10px 25px; font-size: 16px; cursor: pointer; color: #888; padding-bottom: 12px; }
 .tab-btn.active { color: #007aff; border-bottom: 3px solid #007aff; font-weight: bold; }
+.catalog-series-tabs { flex-wrap: wrap; }
 
 /* =========================================
    卡片圖鑑：擴充包與卡圖格

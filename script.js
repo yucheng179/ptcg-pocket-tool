@@ -27,7 +27,8 @@ let cardsData = [];
 let uniqueCardsDict = {}; 
 let catalogCardsData = [];
 let activeCatalogExpansionId = null;
-let activeCatalogSeries = "B";
+const DEFAULT_CATALOG_SERIES = "C";
+let activeCatalogSeries = DEFAULT_CATALOG_SERIES;
 let catalogGroupByCardType = false;
 let catalogCollapsedTypeGroups = new Set();
 let catalogGlobalSearchQuery = "";
@@ -1494,7 +1495,7 @@ function switchSection(sectionName, titleText, navEl, viewEl) {
         scrollMainToTop();
     }
     if (sectionName === "card_catalog") {
-        activeCatalogSeries = "B";
+        activeCatalogSeries = DEFAULT_CATALOG_SERIES;
         activeCatalogExpansionId = null;
         catalogGroupByCardType = false;
         catalogGlobalSearchQuery = "";
@@ -1693,7 +1694,7 @@ function getVisibleCatalogExpansionIds() {
 
     const baseIds = catalogExpansionIds.filter(id => id.startsWith(activeCatalogSeries));
     const extraIds = Array.from(existingIds)
-        .filter(id => !catalogExpansionIds.includes(id) && id.startsWith(activeCatalogSeries) && /^[AB]\d[a-z]?$/i.test(id))
+        .filter(id => !catalogExpansionIds.includes(id) && id.startsWith(activeCatalogSeries) && /^[ABC]\d+[a-z]?$/i.test(id))
         .sort((a, b) => a.localeCompare(b, "en", { numeric: true }));
     return [...baseIds, ...extraIds];
 }
@@ -1739,7 +1740,12 @@ function renderCardCatalog() {
         return;
     }
 
-    getVisibleCatalogExpansionIds().forEach(expansionId => {
+    const expansionIds = getVisibleCatalogExpansionIds();
+    if (!expansionIds.length) {
+        catalogExpansionsGrid.innerHTML = `<div class="catalog-empty-state"><strong>此系列尚無卡包資料</strong></div>`;
+        return;
+    }
+    expansionIds.forEach(expansionId => {
         const cards = getCatalogExpansionCards(expansionId);
         const expansionEl = document.createElement("button");
         expansionEl.type = "button";
@@ -1883,7 +1889,7 @@ catalogSeriesTabs.forEach(tab => {
     tab.addEventListener("click", () => {
         catalogSeriesTabs.forEach(item => item.classList.remove("active"));
         tab.classList.add("active");
-        activeCatalogSeries = tab.dataset.series || "B";
+        activeCatalogSeries = tab.dataset.series || DEFAULT_CATALOG_SERIES;
         activeCatalogExpansionId = null;
         catalogGroupByCardType = false;
         catalogGlobalSearchQuery = "";

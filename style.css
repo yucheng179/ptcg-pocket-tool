@@ -643,6 +643,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .general-tag-option:hover {
     background: #f1f1ef;
 }
+.general-tag-create-label { flex-shrink: 0; color: #777; font-size: 13px; }
 .general-tag-option.dragging {
     opacity: 0.45;
 }
@@ -695,6 +696,9 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     position: fixed;
     z-index: 2400;
     width: 220px;
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    box-sizing: border-box;
     padding: 6px 4px;
     border: 1px solid #e6e6e6;
     border-radius: 8px;
@@ -745,7 +749,7 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .general-tag-color-option.selected .general-tag-color-check {
     display: block;
 }
-.general-tag-delete-option {
+.general-tag-rename-option, .general-tag-delete-option {
     width: calc(100% - 8px);
     min-height: 34px;
     margin: 8px 4px 2px;
@@ -754,12 +758,15 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     border-top: 1px solid #eee;
     border-radius: 6px;
     background: #fff;
-    color: #d9363e;
+    color: #333;
     cursor: pointer;
     font-size: 14px;
     font-weight: bold;
     text-align: left;
 }
+.general-tag-rename-option:hover { background: #f1f1ef; }
+.general-tag-rename-option:disabled, .general-tag-delete-option:disabled { opacity: 0.5; cursor: wait; }
+.general-tag-delete-option { color: #d9363e; }
 .general-tag-delete-option:hover {
     background: #fff1f0;
 }

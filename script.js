@@ -132,12 +132,6 @@ function getGeneralAttributeCardType(type) {
     return ["物品", "道具", "競技場", "物品與道具"].includes(type) ? "物品、道具、競技場" : type;
 }
 
-function getGeneralCardTagScope(card) {
-    return getGeneralCardTab(card) === "各屬性"
-        ? `各屬性:${card.generalData?.attribute || "草"}`
-        : card.generalData?.type || "支援者";
-}
-
 const generalTagColors = [
     { name: "預設", value: "#6c5ce7", bg: "#ece7ff" },
     { name: "灰色", value: "#787774", bg: "#eeeeec" },
@@ -502,12 +496,10 @@ function escapeHtml(value = "") {
         .replace(/'/g, "&#039;");
 }
 
-function getGeneralTagLibrary(typeName = getSelectedGeneralTagType()) {
+function getGeneralTagLibrary() {
     const tagMap = new Map();
-    const normalizedType = normalizeTagName(typeName);
     cardsData.forEach(card => {
         if (card.section !== "general_cards") return;
-        if (normalizeTagName(getGeneralCardTagScope(card)) !== normalizedType) return;
         const tagName = (card.generalData?.tagName || "").trim();
         if (!tagName) return;
         const key = normalizeTagName(tagName);
@@ -524,32 +516,36 @@ function getGeneralTagColorMeta(color) {
         || generalTagColors[0];
 }
 
-function getSelectedGeneralTagType() {
-    if (document.getElementById("card-general-tab")?.value === "各屬性") {
-        return `各屬性:${document.getElementById("card-general-attribute").value}`;
-    }
-    return document.getElementById("card-general-type")?.value || "支援者";
-}
-
-function getGeneralTagOrderStorageKey(typeName = getSelectedGeneralTagType()) {
-    return `${GENERAL_TAG_ORDER_STORAGE_KEY}:${normalizeTagName(typeName)}`;
-}
-
-function getGeneralTagOrder(typeName = getSelectedGeneralTagType()) {
+function getGeneralTagOrder() {
     try {
-        const savedOrder = JSON.parse(localStorage.getItem(getGeneralTagOrderStorageKey(typeName)) || "[]");
+        const saved = localStorage.getItem(GENERAL_TAG_ORDER_STORAGE_KEY);
+        if (saved === null) {
+            const legacyOrders = Object.keys(localStorage)
+                .filter(key => key.startsWith(`${GENERAL_TAG_ORDER_STORAGE_KEY}:`))
+                .sort()
+                .flatMap(key => {
+                    try {
+                        const order = JSON.parse(localStorage.getItem(key));
+                        return Array.isArray(order) ? order : [];
+                    } catch {
+                        return [];
+                    }
+                });
+            return [...new Set(legacyOrders.map(normalizeTagName).filter(Boolean))];
+        }
+        const savedOrder = JSON.parse(saved);
         return Array.isArray(savedOrder) ? savedOrder : [];
     } catch {
         return [];
     }
 }
 
-function saveGeneralTagOrder(tagNames, typeName = getSelectedGeneralTagType()) {
-    localStorage.setItem(getGeneralTagOrderStorageKey(typeName), JSON.stringify(tagNames.map(normalizeTagName).filter(Boolean)));
+function saveGeneralTagOrder(tagNames) {
+    localStorage.setItem(GENERAL_TAG_ORDER_STORAGE_KEY, JSON.stringify(tagNames.map(normalizeTagName).filter(Boolean)));
 }
 
-function sortGeneralTags(tags, typeName = getSelectedGeneralTagType()) {
-    const order = getGeneralTagOrder(typeName);
+function sortGeneralTags(tags) {
+    const order = getGeneralTagOrder();
     const orderMap = new Map(order.map((name, index) => [name, index]));
     return [...tags].sort((a, b) => {
         const indexA = orderMap.has(normalizeTagName(a.name)) ? orderMap.get(normalizeTagName(a.name)) : Number.MAX_SAFE_INTEGER;
@@ -576,7 +572,6 @@ function hideGeneralTagColorPopover() {
 
 function openGeneralTagColorPopover(anchorEl, targetTagName = generalTagNameInput.value) {
     const selectedColor = generalTagColorInput.value || getGeneralTagColorMeta().value;
-    const selectedType = getSelectedGeneralTagType();
     generalTagColorPopover.innerHTML = `<div class="general-tag-color-title">顏色</div>`;
     generalTagColors.forEach(color => {
         const button = document.createElement("button");
@@ -592,6 +587,7 @@ function openGeneralTagColorPopover(anchorEl, targetTagName = generalTagNameInpu
             event.stopPropagation();
             generalTagNameInput.value = targetTagName;
             generalTagColorInput.value = color.value;
+            generalTagColorName = normalizeTagName(targetTagName);
             renderGeneralTagList();
             generalTagList.classList.add("show");
             hideGeneralTagColorPopover();
@@ -599,15 +595,36 @@ function openGeneralTagColorPopover(anchorEl, targetTagName = generalTagNameInpu
         generalTagColorPopover.appendChild(button);
     });
 
-    const deleteButton = document.createElement("button");
-    deleteButton.type = "button";
-    deleteButton.className = "general-tag-delete-option";
-    deleteButton.innerHTML = `<span>刪除標籤</span>`;
-    deleteButton.addEventListener("click", async (event) => {
-        event.stopPropagation();
-        await deleteGeneralTag(targetTagName, selectedType);
-    });
-    generalTagColorPopover.appendChild(deleteButton);
+    if (getGeneralTagLibrary().has(normalizeTagName(targetTagName))) {
+        const renameButton = document.createElement("button");
+        renameButton.type = "button";
+        renameButton.className = "general-tag-rename-option";
+        renameButton.textContent = "更名標籤";
+        renameButton.addEventListener("click", async event => {
+            event.stopPropagation();
+            const buttons = Array.from(generalTagColorPopover.querySelectorAll("button"));
+            buttons.forEach(button => button.disabled = true);
+            try {
+                await renameGeneralTag(targetTagName);
+            } catch (error) {
+                console.error("General tag rename failed:", error);
+                alert("標籤更名失敗，請確認網路連線與資料庫權限後再試一次。");
+            } finally {
+                buttons.forEach(button => button.disabled = false);
+            }
+        });
+        generalTagColorPopover.appendChild(renameButton);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.type = "button";
+        deleteButton.className = "general-tag-delete-option";
+        deleteButton.innerHTML = `<span>刪除標籤</span>`;
+        deleteButton.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            await deleteGeneralTag(targetTagName);
+        });
+        generalTagColorPopover.appendChild(deleteButton);
+    }
 
     generalTagColorPopover.classList.add("show");
 
@@ -621,11 +638,29 @@ function openGeneralTagColorPopover(anchorEl, targetTagName = generalTagNameInpu
     generalTagColorPopover.style.top = `${top}px`;
 }
 
-function renderGeneralTagList(openColorTagName = null) {
-    const selectedType = getSelectedGeneralTagType();
-    const tags = sortGeneralTags(Array.from(getGeneralTagLibrary(selectedType).values()), selectedType);
+function renderGeneralTagList() {
+    const library = getGeneralTagLibrary();
+    const tags = sortGeneralTags(Array.from(library.values()));
     generalTagList.innerHTML = "";
-    if (tags.length === 0) {
+    const draftName = generalTagNameInput.value.trim();
+    if (draftName && !library.has(normalizeTagName(draftName))) {
+        const colorMeta = getGeneralTagColorMeta(generalTagColorInput.value);
+        const createButton = document.createElement("button");
+        createButton.type = "button";
+        createButton.className = "general-tag-option general-tag-create";
+        createButton.title = "設定新標籤顏色";
+        createButton.style.setProperty("--tag-color", colorMeta.value);
+        createButton.style.setProperty("--tag-bg", colorMeta.bg);
+        createButton.innerHTML = `
+            <span class="general-tag-create-label">新增</span>
+            <span class="general-tag-pill">${escapeHtml(draftName)}</span>
+            <span class="general-tag-spacer"></span>
+            <span class="general-tag-more" title="設定新標籤顏色">•••</span>
+        `;
+        createButton.addEventListener("click", () => openGeneralTagColorPopover(createButton, draftName));
+        generalTagList.appendChild(createButton);
+    }
+    if (tags.length === 0 && !draftName) {
         generalTagList.innerHTML = `<div class="general-tag-empty">尚未建立標籤，輸入名稱即可建立</div>`;
         return;
     }
@@ -648,11 +683,15 @@ function renderGeneralTagList(openColorTagName = null) {
         button.addEventListener("click", () => {
             generalTagNameInput.value = tag.name;
             generalTagColorInput.value = colorMeta.value;
+            generalTagColorName = normalizeTagName(tag.name);
+            hideGeneralTagColorPopover();
+            renderGeneralTagList();
         });
         button.querySelector(".general-tag-more").addEventListener("click", (event) => {
             event.stopPropagation();
             generalTagNameInput.value = tag.name;
             generalTagColorInput.value = colorMeta.value;
+            generalTagColorName = normalizeTagName(tag.name);
             openGeneralTagColorPopover(event.currentTarget, tag.name);
         });
         button.addEventListener("dragstart", (event) => {
@@ -674,14 +713,14 @@ function renderGeneralTagList(openColorTagName = null) {
             event.preventDefault();
             button.classList.remove("drag-over");
             if (!draggedGeneralTagName || draggedGeneralTagName === tag.name) return;
-            const nextOrder = sortGeneralTags(Array.from(getGeneralTagLibrary(selectedType).values()), selectedType).map(item => item.name);
+            const nextOrder = sortGeneralTags(Array.from(getGeneralTagLibrary().values())).map(item => item.name);
             const fromIndex = nextOrder.findIndex(name => normalizeTagName(name) === normalizeTagName(draggedGeneralTagName));
             const toIndex = nextOrder.findIndex(name => normalizeTagName(name) === normalizeTagName(tag.name));
             if (fromIndex === -1 || toIndex === -1) return;
             const [movedTag] = nextOrder.splice(fromIndex, 1);
             nextOrder.splice(toIndex, 0, movedTag);
-            saveGeneralTagOrder(nextOrder, selectedType);
-            renderGeneralTagList(openColorTagName);
+            saveGeneralTagOrder(nextOrder);
+            renderGeneralTagList();
             generalTagList.classList.add("show");
         });
         generalTagList.appendChild(button);
@@ -690,27 +729,30 @@ function renderGeneralTagList(openColorTagName = null) {
 }
 
 function syncGeneralTagColorFromName() {
-    const tag = getGeneralTagLibrary().get(normalizeTagName(generalTagNameInput.value));
+    const normalizedName = normalizeTagName(generalTagNameInput.value);
+    const tag = getGeneralTagLibrary().get(normalizedName);
     if (tag) {
         generalTagColorInput.value = getGeneralTagColorMeta(tag.color).value;
+    } else if (normalizedName !== generalTagColorName) {
+        generalTagColorInput.value = "#787774";
     }
+    generalTagColorName = normalizedName;
 }
 
-function renderGeneralCardTag(card) {
+function renderGeneralCardTag(card, tagLibrary) {
     const tagName = (card.generalData?.tagName || "").trim();
     if (!tagName) return "";
-    const colorMeta = getGeneralTagColorMeta(card.generalData?.tagColor);
+    const sharedTag = tagLibrary.get(normalizeTagName(tagName));
+    const colorMeta = getGeneralTagColorMeta(sharedTag?.color || card.generalData?.tagColor);
     return `<div class="general-card-tag-line"><div class="general-card-tag" style="--tag-color:${colorMeta.value}; --tag-bg:${colorMeta.bg};">${escapeHtml(tagName)}</div></div>`;
 }
 
-async function syncSharedGeneralTagColor(tagName, tagColor, typeName, skipDocId = null) {
+async function syncSharedGeneralTagColor(tagName, tagColor, skipDocId = null) {
     if (!tagName || !isValidHexColor(tagColor)) return;
     const normalizedTagName = normalizeTagName(tagName);
-    const normalizedTypeName = normalizeTagName(typeName);
     const cardsToUpdate = cardsData.filter(card =>
         card.section === "general_cards"
         && card.docId !== skipDocId
-        && normalizeTagName(getGeneralCardTagScope(card)) === normalizedTypeName
         && normalizeTagName(card.generalData?.tagName || "") === normalizedTagName
         && card.generalData?.tagColor !== tagColor
     );
@@ -724,17 +766,55 @@ async function syncSharedGeneralTagColor(tagName, tagColor, typeName, skipDocId 
     }
 }
 
-async function deleteGeneralTag(tagName, typeName) {
+async function renameGeneralTag(tagName) {
+    const input = prompt("請輸入新的標籤名稱", tagName);
+    if (input === null) return;
+    const newName = input.normalize("NFKC").replace(/\s+/g, " ").trim();
+    if (!newName) {
+        alert("標籤名稱不能為空白。");
+        return;
+    }
+    if (newName === tagName) return;
+
+    const oldKey = normalizeTagName(tagName);
+    const newKey = normalizeTagName(newName);
+    const library = getGeneralTagLibrary();
+    if (oldKey !== newKey && library.has(newKey)) {
+        alert("已有相同名稱的標籤，請使用其他名稱。");
+        return;
+    }
+    const nextOrder = sortGeneralTags(Array.from(library.values())).map(tag =>
+        normalizeTagName(tag.name) === oldKey ? newName : tag.name
+    );
+    const cardsToUpdate = cardsData.filter(card =>
+        card.section === "general_cards"
+        && normalizeTagName(card.generalData?.tagName || "") === oldKey
+    );
+    for (let i = 0; i < cardsToUpdate.length; i += 450) {
+        const batch = writeBatch(db);
+        cardsToUpdate.slice(i, i + 450).forEach(card => {
+            batch.update(doc(db, "ptcg_cards", card.docId), { "generalData.tagName": newName });
+        });
+        await batch.commit();
+    }
+    saveGeneralTagOrder(nextOrder);
+    if (normalizeTagName(generalTagNameInput.value) === oldKey) {
+        generalTagNameInput.value = newName;
+        generalTagColorName = newKey;
+    }
+    hideGeneralTagColorPopover();
+    renderGeneralTagList();
+    generalTagList.classList.add("show");
+}
+
+async function deleteGeneralTag(tagName) {
     if (!tagName) return;
-    const groupName = typeName.startsWith("各屬性:") ? `${typeName.slice("各屬性:".length)}屬性` : typeName;
-    const confirmed = confirm(`確定要刪除「${tagName}」標籤嗎？\n\n這會清空「${groupName}」區塊中所有使用此標籤的卡片。`);
+    const confirmed = confirm(`確定要刪除「${tagName}」標籤嗎？\n\n這會清空「泛用卡」頁面中所有使用此標籤的卡片。`);
     if (!confirmed) return;
 
     const normalizedTagName = normalizeTagName(tagName);
-    const normalizedTypeName = normalizeTagName(typeName);
     const cardsToUpdate = cardsData.filter(card =>
         card.section === "general_cards"
-        && normalizeTagName(getGeneralCardTagScope(card)) === normalizedTypeName
         && normalizeTagName(card.generalData?.tagName || "") === normalizedTagName
     );
 
@@ -749,14 +829,15 @@ async function deleteGeneralTag(tagName, typeName) {
         await batch.commit();
     }
 
-    const nextOrder = sortGeneralTags(Array.from(getGeneralTagLibrary(typeName).values()), typeName)
+    const nextOrder = sortGeneralTags(Array.from(getGeneralTagLibrary().values()))
         .map(item => item.name)
         .filter(name => normalizeTagName(name) !== normalizedTagName);
-    saveGeneralTagOrder(nextOrder, typeName);
+    saveGeneralTagOrder(nextOrder);
 
     if (normalizeTagName(generalTagNameInput.value) === normalizedTagName) {
         generalTagNameInput.value = "";
         generalTagColorInput.value = "#787774";
+        generalTagColorName = "";
     }
     hideGeneralTagColorPopover();
     renderGeneralTagList();
@@ -1357,6 +1438,7 @@ const deckColorSwatches = document.querySelectorAll("#deck-card-color-palette .d
 const deckColorInput = document.getElementById("deck-card-bgcolor");
 const generalTagNameInput = document.getElementById("card-general-tag-name");
 const generalTagColorInput = document.getElementById("card-general-tag-color");
+let generalTagColorName = "";
 const generalTagList = document.getElementById("general-tag-list");
 let generalTagColorPopover = document.getElementById("general-tag-color-popover");
 if (!generalTagColorPopover) {
@@ -3566,6 +3648,7 @@ function renderGeneralCardsRows() {
 }
 
 function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, className, typeName, attribute = null) {
+    const tagLibrary = getGeneralTagLibrary();
     const statusRow = document.createElement("div");
     statusRow.className = `status-row ${className}`;
     statusRow.innerHTML = `<div class="status-label">${labelText}</div>`;
@@ -3631,7 +3714,7 @@ function createHorizontalRowGeneral(parentBlock, cards, hasMainVal, labelText, c
         const displayImg = card.imageUrl ? card.imageUrl : "https://placehold.co/150x210/eaeaea/999999?text=No+Image";
         const displayName = card.name ? card.name : "<span style='color:#ccc'>(未命名)</span>";
         const displayId = card.id ? `# ${card.id}` : "<span style='color:#ccc'>(無編號)</span>";
-        const tagHtml = renderGeneralCardTag(card);
+        const tagHtml = renderGeneralCardTag(card, tagLibrary);
 
         cardEl.innerHTML = `
             ${attribute ? "" : '<button class="toggle-main-btn" title="切換分類狀態">🔄</button>'}
@@ -4076,19 +4159,17 @@ function updateGeneralCardAutocompleteContext() {
     if (autocompleteList.classList.contains("show")) renderAutocomplete(cardNameInput.value.trim());
 }
 
-function resetGeneralCardTagSelection() {
-    generalTagNameInput.value = "";
-    generalTagColorInput.value = "#787774";
+function refreshGeneralTagOptions() {
     hideGeneralTagColorPopover();
     renderGeneralTagList();
 }
 
 document.getElementById("card-general-tab").addEventListener("change", () => {
     updateGeneralCardFormFields();
-    resetGeneralCardTagSelection();
+    refreshGeneralTagOptions();
 });
 
-document.getElementById("card-general-attribute").addEventListener("change", resetGeneralCardTagSelection);
+document.getElementById("card-general-attribute").addEventListener("change", refreshGeneralTagOptions);
 
 document.getElementById("card-rarity").addEventListener("change", () => {
     updateTierFieldVisibility();
@@ -4105,14 +4186,12 @@ generalTagNameInput.addEventListener("input", () => {
     showGeneralTagOptions();
 });
 generalTagNameInput.addEventListener("change", syncGeneralTagColorFromName);
+generalTagList.addEventListener("keydown", event => {
+    if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+});
 document.getElementById("card-general-type").addEventListener("change", () => {
     updateGeneralCardAutocompleteContext();
-    if (document.getElementById("card-general-tab").value === "各屬性") {
-        hideGeneralTagColorPopover();
-        renderGeneralTagList();
-    } else {
-        resetGeneralCardTagSelection();
-    }
+    refreshGeneralTagOptions();
     if (generalTagList.classList.contains("show")) showGeneralTagOptions();
 });
 document.getElementById("group-general-tag").addEventListener("click", (event) => event.stopPropagation());
@@ -4157,6 +4236,7 @@ function openNewModal(rarityName, typeName = null, hasMainVal = null, attribute 
     document.getElementById("card-needed-tab").value = currentNeededTab; 
     generalTagNameInput.value = "";
     generalTagColorInput.value = "#787774";
+    generalTagColorName = "";
     renderGeneralTagList();
     clearTradedCardForm();
     
@@ -4207,7 +4287,9 @@ function openEditModal(docId) {
             ? getGeneralAttributeCardType(card.generalData?.type) || "寶可夢"
             : card.generalData?.type || "支援者";
         generalTagNameInput.value = card.generalData?.tagName || "";
-        generalTagColorInput.value = getGeneralTagColorMeta(card.generalData?.tagColor).value;
+        const sharedTag = getGeneralTagLibrary().get(normalizeTagName(generalTagNameInput.value));
+        generalTagColorInput.value = getGeneralTagColorMeta(sharedTag?.color || card.generalData?.tagColor).value;
+        generalTagColorName = normalizeTagName(generalTagNameInput.value);
         renderGeneralTagList();
         
         document.getElementById("card-two-star-tab").value = card.twoStarData?.tab || "擁有的卡";
@@ -4353,7 +4435,7 @@ cardForm.addEventListener("submit", async (e) => {
     }
 
     if (saveSection === "general_cards" && cardObj.generalData?.tagName) {
-        await syncSharedGeneralTagColor(cardObj.generalData.tagName, cardObj.generalData.tagColor, getGeneralCardTagScope(cardObj), savedDocId);
+        await syncSharedGeneralTagColor(cardObj.generalData.tagName, cardObj.generalData.tagColor, savedDocId);
     }
 
     formModal.classList.remove("show");

@@ -20,10 +20,12 @@ const fixtures = [
     makeCard("grass-item", "草物品", "物品", { tab: "各屬性", attribute: "草" }),
     makeCard("water-a", "水寶可夢", "寶可夢", { tab: "各屬性", attribute: "水" }),
     makeCard("fire-tool", "火道具", "道具", { tab: "各屬性", attribute: "火" }),
-    makeCard("fire-stadium", "火競技場", "競技場", { tab: "各屬性", attribute: "火" })
+    makeCard("fire-stadium", "火競技場", "競技場", { tab: "各屬性", attribute: "火" }),
+    { ...makeCard("other-section", "其他頁卡片", "支援者"), section: "needed_cards" }
 ];
 
 test("general tabs preserve legacy cards and save attribute cards through all workflows", async () => {
+    await mkdir(new URL(".cache/", root), { recursive: true });
     const bridge = `
         window.__general = {
             load(cards) { cardsData = cards; rebuildUniqueCardsDict(cardsData); switchSection('general_cards', '泛用卡', navGeneral, viewGeneral); },
@@ -48,7 +50,7 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         "firebase-auth.js": "export const browserLocalPersistence={}; export const getAuth=()=>({}); export class GoogleAuthProvider{setCustomParameters(){}} export const getRedirectResult=async()=>null; export const onAuthStateChanged=()=>{}; export const setPersistence=async()=>{}; export const signInWithPopup=async()=>{}; export const signInWithRedirect=async()=>{}; export const signOut=async()=>{};",
         "firebase-firestore.js": `export const getFirestore=()=>({}); export const collection=()=>({}); export const doc=(...args)=>({id:args.at(-1)}); export const onSnapshot=()=>()=>{};
             export const addDoc=async(ref,data)=>window.__general.add(data); export const updateDoc=async(ref,data)=>window.__general.update(ref,data); export const deleteDoc=async(ref)=>window.__general.remove(ref);
-            export const writeBatch=()=>{const operations=[];return{update(ref,data){operations.push([ref,data]);},async commit(){for(const [ref,data] of operations)window.__general.update(ref,data);}}};`
+            export const writeBatch=()=>{const operations=[];return{update(ref,data){operations.push([ref,data]);},async commit(){if(window.__failBatch)throw new Error('test batch failure');for(const [ref,data] of operations)window.__general.update(ref,data);}}};`
     };
     const allowed = new Set(["index.html", "style.css", "script.js", "deck-qr.mjs", "crawler/raenonx-cards.json"]);
     const server = createServer(async (request, response) => {
@@ -92,6 +94,24 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
             await page.waitForFunction(() => !document.getElementById("form-modal").classList.contains("show"));
         };
         const state = () => page.evaluate(() => window.__general.state());
+        const renameTag = async newName => {
+            const dialogs = [];
+            const handler = async dialog => {
+                dialogs.push({ type: dialog.type(), message: dialog.message() });
+                if (dialog.type() === "prompt") {
+                    if (newName === null) await dialog.dismiss();
+                    else await dialog.accept(newName);
+                } else await dialog.accept();
+            };
+            page.on("dialog", handler);
+            try {
+                await page.locator(".general-tag-rename-option").click();
+                await page.waitForFunction(() => !document.querySelector(".general-tag-rename-option")?.disabled);
+            } finally {
+                page.off("dialog", handler);
+            }
+            return dialogs;
+        };
         const named = (parent, name) => parent.locator(".card-box").filter({ has: page.locator(".card-info strong", { hasText: name }) });
 
         assert.equal(await blocks.count(), 5);
@@ -112,12 +132,27 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         assert.ok((await page.evaluate(() => window.__general.context())).every(type => type === "pokemon"));
         await page.locator("#card-name").fill("新增草卡");
         await page.locator("#card-id").fill("TEST-001");
+        await page.locator("#card-general-tag-name").fill("首建藍標籤");
+        const createTag = page.locator(".general-tag-create");
+        assert.equal(await createTag.locator(".general-tag-pill").textContent(), "首建藍標籤");
+        await createTag.focus();
+        await createTag.press("Enter");
+        assert.ok(await page.locator("#form-modal").evaluate(modal => modal.classList.contains("show")));
+        assert.ok(await page.locator("#general-tag-color-popover").isVisible());
+        assert.equal(await page.locator(".general-tag-delete-option").count(), 0);
+        assert.equal(await page.locator(".general-tag-rename-option").count(), 0);
+        await page.screenshot({ path: fileURLToPath(new URL(".cache/general-tag-new-desktop.png", root)) });
+        await page.locator(".general-tag-color-option").filter({ hasText: "藍色" }).click();
         await save();
         let added = (await state()).find(card => card.name === "新增草卡");
         assert.equal(added.generalData.attribute, "草");
         assert.equal(added.generalData.tab, "各屬性");
+        assert.equal(added.generalData.tagName, "首建藍標籤");
+        assert.equal(added.generalData.tagColor, "#337ea9");
         await named(grass, "新增草卡").click();
         await page.locator("#card-general-attribute").selectOption("水");
+        assert.equal(await page.locator("#card-general-tag-name").inputValue(), "首建藍標籤");
+        assert.equal(await page.locator("#card-general-tag-color").inputValue(), "#337ea9");
         await save();
         assert.equal(await named(grass, "新增草卡").count(), 0);
         assert.equal(await named(water, "新增草卡").count(), 1);
@@ -147,25 +182,71 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         await attributeTab.click();
 
         await named(grass, "草支援者").click();
+        await page.locator("#card-general-tag-name").click();
+        assert.equal(await page.locator('.general-tag-option[data-tag-name="首建藍標籤"]').count(), 1);
+        assert.equal(await page.locator('.general-tag-option[data-tag-name="共用標籤"]').count(), 1);
         await page.locator("#card-general-type").selectOption("寶可夢");
         assert.equal(await page.locator("#card-general-tag-name").inputValue(), "共用標籤");
         await page.locator("#card-general-type").selectOption("支援者");
         await page.locator("#card-general-tag-name").fill("共用標籤");
-        await page.evaluate(() => document.getElementById("card-general-tag-color").value = "#c14c8a");
+        await page.locator('.general-tag-option[data-tag-name="共用標籤"] .general-tag-more').click();
+        await page.locator(".general-tag-color-option").filter({ hasText: "粉色" }).click();
         await save();
         let records = await state();
-        assert.ok(records.filter(card => card.generalData.attribute === "草").every(card => card.generalData.tagColor === "#c14c8a"));
-        assert.equal(records.find(card => card.docId === "water-a").generalData.tagColor, "#787774");
-        assert.equal(records.find(card => card.docId === "old-support").generalData.tagColor, "#787774");
+        assert.ok(records.filter(card => card.section === "general_cards" && card.generalData.tagName === "共用標籤").every(card => card.generalData.tagColor === "#c14c8a"));
+        assert.equal(records.find(card => card.docId === "water-a").generalData.tagColor, "#c14c8a");
+        assert.equal(records.find(card => card.docId === "old-support").generalData.tagColor, "#c14c8a");
+        assert.equal(records.find(card => card.docId === "other-section").generalData.tagColor, "#787774");
         await named(grass, "草支援者").click();
         await page.locator("#card-general-tag-name").click();
-        await page.locator(".general-tag-more").first().click();
+        await page.locator('.general-tag-option[data-tag-name="共用標籤"]').dragTo(page.locator('.general-tag-option[data-tag-name="首建藍標籤"]'));
+        const sharedOrder = await page.locator(".general-tag-option").evaluateAll(options => options.map(option => option.dataset.tagName));
+        await close();
+        await named(water, "水寶可夢").click();
+        await page.locator("#card-general-tag-name").click();
+        assert.deepEqual(await page.locator(".general-tag-option").evaluateAll(options => options.map(option => option.dataset.tagName)), sharedOrder);
+        await page.locator('.general-tag-option[data-tag-name="共用標籤"] .general-tag-more').click();
+        await page.screenshot({ path: fileURLToPath(new URL(".cache/general-tag-rename-desktop.png", root)) });
+        const beforeRename = await state();
+        await renameTag(null);
+        assert.deepEqual(await state(), beforeRename);
+        const emptyName = await renameTag("   ");
+        assert.ok(emptyName.some(dialog => dialog.type === "alert" && dialog.message.includes("不能為空白")));
+        assert.deepEqual(await state(), beforeRename);
+        const duplicateName = await renameTag("首建藍標籤");
+        assert.ok(duplicateName.some(dialog => dialog.type === "alert" && dialog.message.includes("相同名稱")));
+        assert.deepEqual(await state(), beforeRename);
+        await page.evaluate(() => window.__failBatch = true);
+        const failedRename = await renameTag("全頁標籤");
+        assert.ok(failedRename.some(dialog => dialog.type === "alert" && dialog.message.includes("更名失敗")));
+        assert.deepEqual(await state(), beforeRename);
+        assert.equal(await page.locator("#card-general-tag-name").inputValue(), "共用標籤");
+        await page.evaluate(() => window.__failBatch = false);
+        await renameTag("全頁標籤");
+        records = await state();
+        const renamedCards = records.filter(card => card.section === "general_cards" && card.generalData.tagName === "全頁標籤");
+        assert.equal(renamedCards.length, beforeRename.filter(card => card.section === "general_cards" && card.generalData.tagName === "共用標籤").length);
+        assert.ok(renamedCards.every(card => card.generalData.tagColor === "#c14c8a"));
+        assert.equal(records.find(card => card.docId === "other-section").generalData.tagName, "共用標籤");
+        assert.equal(records.find(card => card.name === "新增草卡").generalData.tagName, "首建藍標籤");
+        assert.equal(await page.locator("#card-general-tag-name").inputValue(), "全頁標籤");
+        assert.deepEqual(await page.locator(".general-tag-option").evaluateAll(options => options.map(option => option.dataset.tagName)), sharedOrder.map(name => name === "共用標籤" ? "全頁標籤" : name));
+        await save();
+        assert.equal((await state()).find(card => card.docId === "water-a").generalData.tagName, "全頁標籤");
+        await commonTab.click();
+        assert.equal(await named(blocks, "舊支援者").locator(".general-card-tag").textContent(), "全頁標籤");
+        await attributeTab.click();
+        await named(water, "水寶可夢").click();
+        await page.locator("#card-general-tag-name").click();
+        await page.locator('.general-tag-option[data-tag-name="全頁標籤"] .general-tag-more').click();
         page.once("dialog", dialog => dialog.accept());
         await page.locator(".general-tag-delete-option").click();
         records = await state();
         assert.ok(records.filter(card => card.generalData.attribute === "草").every(card => card.generalData.tagName === ""));
-        assert.equal(records.find(card => card.docId === "water-a").generalData.tagName, "共用標籤");
-        assert.equal(records.find(card => card.docId === "old-support").generalData.tagName, "共用標籤");
+        assert.equal(records.find(card => card.docId === "water-a").generalData.tagName, "");
+        assert.equal(records.find(card => card.docId === "old-support").generalData.tagName, "");
+        assert.equal(records.find(card => card.docId === "other-section").generalData.tagName, "共用標籤");
+        assert.equal(records.find(card => card.name === "新增草卡").generalData.tagName, "首建藍標籤");
         await close();
 
         await named(grass, "草寶可夢甲").dragTo(named(grass, "草寶可夢乙"));
@@ -200,6 +281,26 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
             });
         });
         assert.ok(withinBlock, "Mobile cards must fit inside the attribute block");
+        await named(grass, "草支援者").click();
+        await page.locator("#card-general-tag-name").fill("手機初次新增");
+        await page.locator(".general-tag-create").click();
+        const paletteBounds = await page.locator("#general-tag-color-popover").boundingBox();
+        assert.ok(paletteBounds.x >= 0 && paletteBounds.x + paletteBounds.width <= 390);
+        assert.ok(paletteBounds.y >= 0 && paletteBounds.y + paletteBounds.height <= 844);
+        await page.screenshot({ path: fileURLToPath(new URL(".cache/general-tag-new-mobile.png", root)) });
+        await page.locator(".general-tag-color-option").filter({ hasText: "綠色" }).click();
+        assert.equal(await page.locator("#card-general-tag-color").inputValue(), "#448361");
+        await close();
+        await page.setViewportSize({ width: 640, height: 360 });
+        await named(water, "新增草卡").click();
+        await page.locator("#card-general-tag-name").click();
+        await page.locator('.general-tag-option[data-tag-name="首建藍標籤"] .general-tag-more').click();
+        await page.locator(".general-tag-delete-option").scrollIntoViewIfNeeded();
+        const smallPalette = await page.locator("#general-tag-color-popover").boundingBox();
+        const deleteBounds = await page.locator(".general-tag-delete-option").boundingBox();
+        assert.ok(smallPalette.y >= 0 && smallPalette.y + smallPalette.height <= 360);
+        assert.ok(deleteBounds.y >= 0 && deleteBounds.y + deleteBounds.height <= 360);
+        await page.screenshot({ path: fileURLToPath(new URL(".cache/general-tag-rename-mobile.png", root)) });
         assert.equal(errors.length, 0, errors.join("\n"));
     } finally {
         await browser?.close();

@@ -138,6 +138,15 @@
               各屬性
             </button>
           </div>
+          <div class="general-tag-filter-bar">
+            <label for="general-tag-filter">標籤篩選</label>
+            <select id="general-tag-filter">
+              <option value="">全部標籤</option>
+            </select>
+          </div>
+          <p id="general-tag-filter-empty" class="general-tag-filter-empty" hidden>
+            此分頁沒有符合標籤的卡片
+          </p>
           <div
             id="rarity-rows-general-container"
             class="rarity-rows-container"
@@ -160,10 +169,14 @@
                 id="catalog-global-filters"
                 class="catalog-filter-panel"
               ></div>
+              <p id="catalog-global-count" class="catalog-result-count" role="status" aria-atomic="true">載入中...</p>
             </div>
             <div class="account-tabs catalog-series-tabs">
+              <button class="tab-btn catalog-series-tab-btn active" data-series="ALL">
+                總覽
+              </button>
               <button
-                class="tab-btn catalog-series-tab-btn active"
+                class="tab-btn catalog-series-tab-btn"
                 data-series="C"
               >
                 C系列
@@ -188,6 +201,9 @@
               id="catalog-expansions-grid"
               class="catalog-expansions-grid"
             ></div>
+            <div id="catalog-load-more-container" class="catalog-load-more" hidden>
+              <button id="btn-catalog-load-more" class="catalog-load-more-button" type="button">顯示更多</button>
+            </div>
           </div>
           <div id="catalog-expansion-detail-view" style="display: none">
             <div class="catalog-detail-header">
@@ -212,6 +228,7 @@
                 id="catalog-detail-filters"
                 class="catalog-filter-panel"
               ></div>
+              <p id="catalog-detail-count" class="catalog-result-count" role="status" aria-atomic="true"></p>
             </div>
             <div id="catalog-cards-grid" class="catalog-cards-grid"></div>
           </div>
@@ -680,19 +697,10 @@
             </select>
           </div>
           <div class="input-group">
-            <label>主屬性：</label>
-            <select id="deck-attribute">
-              <option value="草">草</option>
-              <option value="火">火</option>
-              <option value="水">水</option>
-              <option value="電">電</option>
-              <option value="超">超能</option>
-              <option value="鬥">鬥</option>
-              <option value="惡">惡</option>
-              <option value="鋼">鋼</option>
-              <option value="龍">龍</option>
-              <option value="無">無</option>
-            </select>
+            <fieldset id="deck-attribute" class="deck-attribute-field">
+              <legend>牌組屬性：</legend>
+              <div id="deck-attribute-options" class="deck-attribute-options"></div>
+            </fieldset>
           </div>
           <button
             type="submit"

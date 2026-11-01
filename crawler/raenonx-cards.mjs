@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { getPokemonTypes } from "../pokemon-types.mjs";
 
 const locale = "zh";
 const masterUrl = "https://ptcgp.raenonx.cc/api/data/global-master";
@@ -161,6 +162,7 @@ const cards = Object.values(master.cardEntryMap)
       cardId: cardEntry.cardId,
       cardType: getCatalogCardType(cardEntry),
       sourceCardType: cardEntry.cardType || "",
+      pokemonTypes: getPokemonTypes(cardEntry),
       trainerType: cardEntry.cardType === "trainer" ? cardEntry.play?.cardType || "" : ""
     }));
   })

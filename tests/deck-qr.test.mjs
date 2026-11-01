@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { buildDeckQrData, loadDeckQrLibrary } from "../deck-qr.mjs";
+import { buildDeckQrData, getDeckAttributes, getDeckQrEnergyTypes, loadDeckQrLibrary } from "../deck-qr.mjs";
 
 const catalog = JSON.parse(await readFile(new URL("../crawler/raenonx-cards.json", import.meta.url), "utf8"));
 const entries = [
@@ -9,6 +9,24 @@ const entries = [
     ["PROMO-A-007", 2], ["B3a-073", 1], ["B1-225", 1], ["A2-150", 1],
     ["B1-226", 1], ["B1a-068", 1], ["A1-225", 1], ["PROMO-A-005", 2], ["A2-147", 1]
 ];
+
+test("multiple deck attributes preserve legacy data and explicit QR energies", () => {
+    assert.deepEqual(getDeckAttributes({ attribute: "雷" }), ["電"]);
+    assert.deepEqual(getDeckAttributes({ attribute: "超能" }), ["超"]);
+    assert.deepEqual(getDeckAttributes({ attributes: ["草", "水", "草"], attribute: "火" }), ["草", "水"]);
+    assert.deepEqual(getDeckAttributes({ attribute: ["電", "鋼"] }), ["電", "鋼"]);
+    assert.deepEqual(getDeckAttributes(), ["無"]);
+    assert.deepEqual(getDeckQrEnergyTypes({}, "電"), [4]);
+    assert.deepEqual(getDeckQrEnergyTypes({}, ["草", "水", "龍", "無"]), [1, 3]);
+    assert.deepEqual(getDeckQrEnergyTypes({}, ["雷", "電", "超能"]), [4, 5]);
+    assert.deepEqual(getDeckQrEnergyTypes({}, ["龍", "無"]), []);
+    const tab = { energyTypes: [2, 4] };
+    const result = getDeckQrEnergyTypes(tab, ["草", "水"]);
+    assert.deepEqual(result, [2, 4]);
+    result.push(1);
+    assert.deepEqual(tab.energyTypes, [2, 4]);
+    assert.deepEqual(getDeckQrEnergyTypes({ energyTypes: [] }, ["草", "水"]), []);
+});
 function sampleDeck() {
     return entries.map(([id, qty]) => {
         const card = catalog.find(entry => entry.id === id);

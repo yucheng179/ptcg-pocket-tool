@@ -4,6 +4,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { chromium } from "playwright";
+import { pokemonTypeOptions } from "../pokemon-types.mjs";
 
 const root = new URL("../", import.meta.url);
 const catalog = JSON.parse(await readFile(new URL("crawler/raenonx-cards.json", root), "utf8"));
@@ -31,6 +32,8 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
             load(cards) { cardsData = cards; rebuildUniqueCardsDict(cardsData); switchSection('general_cards', '泛用卡', navGeneral, viewGeneral); },
             state() { return structuredClone(cardsData); },
             context() { return getAutocompleteMatches('', cardAutocompleteContext).map(item => item.data.cardType); },
+            matches(query = '') { return getAutocompleteMatches(query, cardAutocompleteContext).map(item => item.data); },
+            catalogReady() { return catalogCardsData.length > 0; },
             add(data) { const id = 'new-' + cardsData.length; cardsData.push({docId:id, ...structuredClone(data)}); this.refresh(); return {id}; },
             update(ref, changes) {
                 const card = cardsData.find(card => card.docId === ref.id);
@@ -52,7 +55,7 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
             export const addDoc=async(ref,data)=>window.__general.add(data); export const updateDoc=async(ref,data)=>window.__general.update(ref,data); export const deleteDoc=async(ref)=>window.__general.remove(ref);
             export const writeBatch=()=>{const operations=[];return{update(ref,data){operations.push([ref,data]);},async commit(){if(window.__failBatch)throw new Error('test batch failure');for(const [ref,data] of operations)window.__general.update(ref,data);}}};`
     };
-    const allowed = new Set(["index.html", "style.css", "script.js", "deck-qr.mjs", "crawler/raenonx-cards.json"]);
+    const allowed = new Set(["index.html", "style.css", "script.js", "deck-qr.mjs", "pokemon-types.mjs", "crawler/raenonx-cards.json"]);
     const server = createServer(async (request, response) => {
         const path = new URL(request.url, "http://local").pathname.slice(1) || "index.html";
         if (!allowed.has(path)) { response.writeHead(404).end(); return; }
@@ -82,10 +85,13 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         });
         await page.goto(origin);
         await page.waitForFunction(() => window.__general);
+        await page.waitForFunction(() => window.__general.catalogReady());
         await page.evaluate(cards => window.__general.load(cards), fixtures);
         const blocks = page.locator("#rarity-rows-general-container > .rarity-row-block");
         const attributeTab = page.locator('.general-tab-btn[data-general="各屬性"]');
         const commonTab = page.locator('.general-tab-btn[data-general="通用"]');
+        const tagFilter = page.locator("#general-tag-filter");
+        const filterEmpty = page.locator("#general-tag-filter-empty");
         const grass = page.locator('.general-attribute-block[data-attribute="草"]');
         const water = page.locator('.general-attribute-block[data-attribute="水"]');
         const close = () => page.locator("#close-modal").click();
@@ -117,6 +123,8 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         assert.equal(await blocks.count(), 5);
         assert.deepEqual(await blocks.locator(".general-header-title").allTextContents(), ["支援者", "物品", "道具", "競技場", "寶可夢"]);
         assert.equal(await blocks.locator(".card-box").count(), 2);
+        assert.equal(await tagFilter.inputValue(), "");
+        assert.deepEqual(await tagFilter.locator("option").allTextContents(), ["全部標籤", "共用標籤"]);
         await attributeTab.click();
         assert.deepEqual(await blocks.locator(".general-header-title").allTextContents(), ["草", "火", "水", "電", "超", "鬥", "惡", "鋼", "龍", "無"]);
         assert.equal(await blocks.locator(".status-row").count(), 30);
@@ -130,6 +138,30 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         assert.equal(await page.locator("#card-general-type").inputValue(), "寶可夢");
         assert.equal(await page.locator("#group-general-subtype").isVisible(), false);
         assert.ok((await page.evaluate(() => window.__general.context())).every(type => type === "pokemon"));
+        await page.locator("#card-name").focus();
+        for (const option of pokemonTypeOptions) {
+            await page.locator("#card-general-attribute").selectOption(option.label);
+            const matches = await page.evaluate(() => window.__general.matches());
+            assert.ok(matches.length > 0, `${option.label} must have suggestions`);
+            assert.ok(matches.every(card => card.cardType === "pokemon" && card.pokemonTypes.includes(option.key)));
+            const displayedIds = await page.locator("#custom-autocomplete-list .ac-id").allTextContents();
+            assert.deepEqual(displayedIds, matches.map(card => card.id ? `#${card.id}` : "(無編號)"));
+            assert.ok(!matches.some(card => card.id === "grass-a"), "Assigned block attributes must not become Pokemon metadata");
+        }
+        await page.locator("#card-general-type").selectOption("支援者");
+        const supporterMatches = await page.evaluate(() => window.__general.matches());
+        assert.ok(supporterMatches.length > 0 && supporterMatches.every(card => card.cardType === "support"));
+        await page.locator("#card-general-attribute").selectOption("草");
+        assert.deepEqual(await page.evaluate(() => window.__general.matches()), supporterMatches);
+        await page.locator("#card-general-type").selectOption("寶可夢");
+        await page.locator("#card-general-tab").selectOption("通用");
+        assert.equal(await page.locator("#card-general-type").inputValue(), "寶可夢");
+        const fireName = catalog.find(card => card.pokemonTypes.includes("fire")).name;
+        const commonMatches = await page.evaluate(name => window.__general.matches(name), fireName);
+        assert.ok(commonMatches.length > 0 && commonMatches.some(card => card.pokemonTypes.includes("fire")), "Common tab must not restrict Pokemon attributes");
+        await page.locator("#card-general-tab").selectOption("各屬性");
+        assert.ok((await page.evaluate(() => window.__general.matches())).every(card => card.pokemonTypes.includes("grass")));
+        assert.equal((await page.evaluate(name => window.__general.matches(name), fireName)).length, 0);
         await page.locator("#card-name").fill("新增草卡");
         await page.locator("#card-id").fill("TEST-001");
         await page.locator("#card-general-tag-name").fill("首建藍標籤");
@@ -149,8 +181,40 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         assert.equal(added.generalData.tab, "各屬性");
         assert.equal(added.generalData.tagName, "首建藍標籤");
         assert.equal(added.generalData.tagColor, "#337ea9");
+        const beforeFilter = await state();
+        await tagFilter.selectOption("首建藍標籤");
+        assert.deepEqual(await blocks.locator(".general-header-title").allTextContents(), ["草"]);
+        assert.equal(await blocks.locator(".card-box").count(), 1);
+        assert.equal(await named(grass, "新增草卡").count(), 1);
+        assert.equal(await filterEmpty.isVisible(), false);
+        await page.screenshot({ path: fileURLToPath(new URL(".cache/general-tag-filter-desktop.png", root)) });
+        await commonTab.click();
+        assert.equal(await tagFilter.inputValue(), "首建藍標籤");
+        assert.equal(await blocks.count(), 0);
+        assert.equal(await blocks.locator(".card-box").count(), 0);
+        assert.ok(await filterEmpty.isVisible());
+        await tagFilter.selectOption("共用標籤");
+        assert.deepEqual(await blocks.locator(".general-header-title").allTextContents(), ["支援者", "物品"]);
+        assert.equal(await blocks.locator(".card-box").count(), 2);
+        assert.equal(await filterEmpty.isVisible(), false);
+        await attributeTab.click();
+        assert.equal(await tagFilter.inputValue(), "共用標籤");
+        assert.deepEqual(await blocks.locator(".general-header-title").allTextContents(), ["草", "火", "水"]);
+        assert.equal(await blocks.locator(".card-box").count(), 7);
+        assert.equal(await named(grass, "新增草卡").count(), 0);
+        await tagFilter.selectOption("");
+        assert.equal(await blocks.count(), 10);
+        assert.equal(await blocks.locator(".card-box").count(), 8);
+        await commonTab.click();
+        assert.equal(await blocks.count(), 5);
+        await attributeTab.click();
+        assert.deepEqual(await state(), beforeFilter, "Filtering must not change card data");
         await named(grass, "新增草卡").click();
+        let editMatches = await page.evaluate(() => window.__general.matches());
+        assert.ok(editMatches.length > 0 && editMatches.every(card => card.pokemonTypes.includes("grass")));
         await page.locator("#card-general-attribute").selectOption("水");
+        editMatches = await page.evaluate(() => window.__general.matches());
+        assert.ok(editMatches.length > 0 && editMatches.every(card => card.pokemonTypes.includes("water")));
         assert.equal(await page.locator("#card-general-tag-name").inputValue(), "首建藍標籤");
         assert.equal(await page.locator("#card-general-tag-color").inputValue(), "#337ea9");
         await save();
@@ -202,6 +266,7 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         await page.locator('.general-tag-option[data-tag-name="共用標籤"]').dragTo(page.locator('.general-tag-option[data-tag-name="首建藍標籤"]'));
         const sharedOrder = await page.locator(".general-tag-option").evaluateAll(options => options.map(option => option.dataset.tagName));
         await close();
+        await tagFilter.selectOption("共用標籤");
         await named(water, "水寶可夢").click();
         await page.locator("#card-general-tag-name").click();
         assert.deepEqual(await page.locator(".general-tag-option").evaluateAll(options => options.map(option => option.dataset.tagName)), sharedOrder);
@@ -223,6 +288,9 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         assert.equal(await page.locator("#card-general-tag-name").inputValue(), "共用標籤");
         await page.evaluate(() => window.__failBatch = false);
         await renameTag("全頁標籤");
+        assert.equal(await tagFilter.inputValue(), "全頁標籤");
+        assert.equal(await named(water, "新增草卡").count(), 0);
+        assert.ok((await blocks.locator(".general-card-tag").allTextContents()).every(name => name === "全頁標籤"));
         records = await state();
         const renamedCards = records.filter(card => card.section === "general_cards" && card.generalData.tagName === "全頁標籤");
         assert.equal(renamedCards.length, beforeRename.filter(card => card.section === "general_cards" && card.generalData.tagName === "共用標籤").length);
@@ -234,6 +302,7 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         await save();
         assert.equal((await state()).find(card => card.docId === "water-a").generalData.tagName, "全頁標籤");
         await commonTab.click();
+        assert.equal(await tagFilter.inputValue(), "全頁標籤");
         assert.equal(await named(blocks, "舊支援者").locator(".general-card-tag").textContent(), "全頁標籤");
         await attributeTab.click();
         await named(water, "水寶可夢").click();
@@ -241,6 +310,8 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         await page.locator('.general-tag-option[data-tag-name="全頁標籤"] .general-tag-more').click();
         page.once("dialog", dialog => dialog.accept());
         await page.locator(".general-tag-delete-option").click();
+        assert.equal(await tagFilter.inputValue(), "");
+        assert.deepEqual(await tagFilter.locator("option").allTextContents(), ["全部標籤", "首建藍標籤"]);
         records = await state();
         assert.ok(records.filter(card => card.generalData.attribute === "草").every(card => card.generalData.tagName === ""));
         assert.equal(records.find(card => card.docId === "water-a").generalData.tagName, "");
@@ -253,6 +324,11 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         records = await state();
         assert.ok(records.find(card => card.docId === "grass-a").generalData.order > records.find(card => card.docId === "grass-b").generalData.order);
         await grass.locator(".rarity-header").click();
+        await tagFilter.selectOption("首建藍標籤");
+        assert.equal(await grass.count(), 0);
+        await tagFilter.selectOption("");
+        assert.equal(await blocks.count(), 10);
+        assert.ok(await grass.evaluate(element => element.classList.contains("collapsed")));
         await named(water, "水寶可夢").click();
         await save();
         assert.ok(await grass.evaluate(element => element.classList.contains("collapsed")));
@@ -266,6 +342,12 @@ test("general tabs preserve legacy cards and save attribute cards through all wo
         await page.setViewportSize({ width: 390, height: 844 });
         await page.locator("#sidebar-toggle").click();
         await page.waitForFunction(() => document.getElementById("sidebar").getBoundingClientRect().width < 70);
+        await tagFilter.selectOption("首建藍標籤");
+        await tagFilter.scrollIntoViewIfNeeded();
+        const filterBounds = await tagFilter.boundingBox();
+        assert.ok(filterBounds.x >= 0 && filterBounds.x + filterBounds.width <= 390);
+        await page.screenshot({ path: fileURLToPath(new URL(".cache/general-tag-filter-mobile.png", root)) });
+        await tagFilter.selectOption("");
         await grass.screenshot({ path: fileURLToPath(new URL(".cache/general-attributes-mobile.png", root)) });
         const noOverlap = await grass.locator(".status-row").evaluateAll(rows => rows.every(row => {
             const label = row.querySelector(".status-label").getBoundingClientRect();

@@ -11,11 +11,20 @@ const energyOptions = [
 
 export { energyOptions };
 
+export function getDeckAttributes(deckData = {}) {
+    const value = Array.isArray(deckData?.attributes) ? deckData.attributes : deckData?.attribute;
+    const attributes = Array.isArray(value) ? value : [value];
+    const valid = new Set([...energyOptions.map(option => option.label), "龍", "無"]);
+    const normalized = [...new Set(attributes.map(attribute => ({ "雷": "電", "超能": "超" }[attribute] || attribute)))]
+        .filter(attribute => valid.has(attribute));
+    return normalized.length ? normalized : ["無"];
+}
+
 export function getDeckQrEnergyTypes(tab = {}, attribute = "") {
     if (Array.isArray(tab.energyTypes)) return [...tab.energyTypes];
-    const normalizedAttribute = { "雷": "電", "超能": "超" }[attribute] || attribute;
-    const option = energyOptions.find(item => item.label === normalizedAttribute);
-    return option ? [option.value] : [];
+    return getDeckAttributes({ attribute })
+        .map(label => energyOptions.find(option => option.label === label)?.value)
+        .filter(Boolean);
 }
 
 let qrLibraryPromise;

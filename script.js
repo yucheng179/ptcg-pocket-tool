@@ -39,6 +39,7 @@ let catalogDetailSearchQuery = "";
 let catalogSelectedTypeFilters = new Set();
 let catalogSelectedRarityFilters = new Set();
 let catalogSelectedAttributeFilters = new Set();
+const metaSelectedAttributeFilters = new Set();
 let cardAutocompleteContext = null;
 let deckCardAutocompleteContext = null;
 const collapsedRarityBlocks = new Set();
@@ -1098,6 +1099,79 @@ function parseDeckImportText(text = "") {
     return { importedCards, unmatchedLines };
 }
 
+function buildDeckExportText(cards = [], energyTypes = []) {
+    if (!cards.length) throw new Error("目前分頁沒有卡片可以匯出。");
+    const groups = [new Map(), new Map()];
+    const invalidCards = [];
+    cards.forEach(card => {
+        const normalizedId = normalizeCardId(card.id || "");
+        let catalogCard = normalizedId
+            ? catalogCardsData.find(entry => normalizeCardId(entry.id) === normalizedId)
+            : null;
+        if (!normalizedId) {
+            const image = normalizeCardImageUrl(card.img || card.imageUrl || "");
+            if (image) catalogCard = catalogCardsData.find(entry => normalizeCardImageUrl(entry.imageUrl || "") === image);
+            if (!catalogCard) {
+                const matches = catalogCardsData.filter(entry => normalizeCardName(entry.name) === normalizeCardName(card.name || ""));
+                if (matches.length === 1) catalogCard = matches[0];
+            }
+        }
+        const id = (catalogCard?.id || card.id || "").normalize("NFKC").replace(/\s+/g, "");
+        const match = /^([a-z][a-z0-9]*(?:-[a-z0-9]+)*)-(\d+)$/i.exec(id);
+        const name = (card.name || catalogCard?.name || "").replace(/\s+/g, " ").trim();
+        const qty = Number(card.qty ?? 1);
+        const type = catalogCard ? getDeckCardTypeFromCatalogCard(catalogCard) : getDeckCardType(card.type);
+        if (!match || !Number.isSafeInteger(Number(match[2])) || Number(match[2]) < 1
+            || !name || !Number.isSafeInteger(qty) || qty < 1 || !deckRowTypes.some(row => row.key === type)) {
+            invalidCards.push(card.name || card.id || "(未命名卡片)");
+            return;
+        }
+        const [, expansion, number] = match;
+        const group = groups[type === "寶可夢" ? 0 : 1];
+        const key = normalizeCardId(id);
+        const existing = group.get(key);
+        if (existing) existing.qty += qty;
+        else group.set(key, { name, qty, expansion: expansion.replace(/^PROMO-([A-Z])$/i, (_, series) => `P-${series.toUpperCase()}`), number: Number(number) });
+    });
+    if (invalidCards.length) {
+        throw new Error(`以下卡片無法匯出，請先確認名稱、編號、種類與數量：\n${invalidCards.join("\n")}`);
+    }
+    const energyNames = ["Grass", "Fire", "Water", "Lightning", "Psychic", "Fighting", "Darkness", "Metal"];
+    const energies = [...new Set(energyTypes)].map(value => {
+        if (!energyOptions.some(option => option.value === value)) throw new Error("牌組能量設定有誤，請先確認能量選項。");
+        return energyNames[value - 1];
+    });
+    const sections = groups.map(group => Array.from(group.values(), card => `${card.qty} ${card.name} ${card.expansion} ${card.number}`).join("\n")).filter(Boolean);
+    return [...sections, `Energy: ${energies.join(", ") || "None"}`].join("\n\n");
+}
+
+async function copyDeckExportText(text) {
+    if (navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(text);
+            return;
+        } catch {
+            // Some browser profiles block the Clipboard API but allow direct copying.
+        }
+    }
+    const focusedElement = document.activeElement;
+    const buffer = document.createElement("textarea");
+    buffer.className = "deck-copy-buffer";
+    buffer.value = text;
+    buffer.readOnly = true;
+    document.body.appendChild(buffer);
+    try {
+        buffer.focus({ preventScroll: true });
+        buffer.select();
+        if (typeof document.execCommand !== "function" || !document.execCommand("copy")) {
+            throw new Error("瀏覽器未允許複製，請確認剪貼簿權限後再試一次。");
+        }
+    } finally {
+        buffer.remove();
+        focusedElement?.focus({ preventScroll: true });
+    }
+}
+
 function getMetaLobbyTabs() {
     const config = cardsData.find(card => card.section === "meta_deck_lobby_config");
     const tabs = config?.lobbyTabs;
@@ -1562,6 +1636,7 @@ const tier3Block = document.getElementById("tier-3-block");
 const metaDeckDetailView = document.getElementById("meta-deck-detail-view");
 const btnBackDecks = document.getElementById("btn-back-decks");
 const btnImportDeckList = document.getElementById("btn-import-deck-list");
+const btnExportDeckList = document.getElementById("btn-export-deck-list");
 const detailDeckTitle = document.getElementById("detail-deck-title");
 const detailDeckCover = document.getElementById("detail-deck-cover");
 const detailDeckRows = document.getElementById("detail-deck-rows");
@@ -1594,6 +1669,7 @@ function switchSection(sectionName, titleText, navEl, viewEl) {
     pageTitle.innerText = titleText;
     
     if (sectionName === "meta_decks") {
+        metaSelectedAttributeFilters.clear();
         activeMetaDeckId = null;
         activeDeckTabId = null;
         metaDecksListView.style.display = "block";
@@ -2138,7 +2214,26 @@ async function handleSafeCopyCard(card) {
 // ==========================================
 // 🪄 渲染：Meta 牌組
 // ==========================================
+function renderMetaDeckAttributeFilters() {
+    const panel = document.getElementById("meta-deck-attribute-filters");
+    panel.innerHTML = `<div class="catalog-filter-groups">${renderCatalogFilterGroup("屬性", pokemonTypeOptions, metaSelectedAttributeFilters, "attribute")}</div>
+        <button type="button" class="btn-secondary catalog-clear-filters" ${metaSelectedAttributeFilters.size ? "" : "disabled"}>清除篩選</button>`;
+    panel.querySelectorAll(".catalog-filter-chip").forEach(button => {
+        button.addEventListener("click", () => {
+            const key = button.dataset.filterKey;
+            if (metaSelectedAttributeFilters.has(key)) metaSelectedAttributeFilters.delete(key);
+            else metaSelectedAttributeFilters.add(key);
+            renderMetaDecksList();
+        });
+    });
+    panel.querySelector(".catalog-clear-filters").addEventListener("click", () => {
+        metaSelectedAttributeFilters.clear();
+        renderMetaDecksList();
+    });
+}
+
 function renderMetaDecksList() {
+    renderMetaDeckAttributeFilters();
     gridTier0.innerHTML = "";
     gridTier1.innerHTML = "";
     gridTier2.innerHTML = "";
@@ -2157,7 +2252,11 @@ function renderMetaDecksList() {
     tier2Block.style.display = isAutoTeam ? "none" : "block";
     tier3Block.style.display = isAutoTeam ? "none" : "block";
 
-    const decks = cardsData.filter(c => c.section === "meta_deck" && getDeckLobbyTabId(c) === activeMetaLobbyTabId);
+    const selectedAttributes = new Set(pokemonTypeOptions.filter(option => metaSelectedAttributeFilters.has(option.key)).map(option => option.label));
+    const decks = cardsData.filter(c => c.section === "meta_deck"
+        && getDeckLobbyTabId(c) === activeMetaLobbyTabId
+        && (!selectedAttributes.size || getDeckAttributes(c.deckData).some(attribute => selectedAttributes.has(attribute))));
+    document.getElementById("meta-deck-filter-empty").hidden = !selectedAttributes.size || decks.length > 0;
     decks.sort((a, b) => (a.deckData?.order || 0) - (b.deckData?.order || 0));
 
     decks.forEach(deck => {
@@ -2437,6 +2536,27 @@ btnImportDeckList?.addEventListener("click", () => {
     document.getElementById("deck-import-text").focus();
 });
 
+btnExportDeckList.addEventListener("click", async () => {
+    const deck = cardsData.find(card => card.docId === activeMetaDeckId);
+    if (!deck) return;
+    const { activeTab } = getActiveDeckTab(deck);
+    const label = btnExportDeckList.querySelector("span");
+    const status = document.getElementById("deck-export-status");
+    status.textContent = "";
+    btnExportDeckList.disabled = true;
+    label.textContent = "複製中...";
+    try {
+        const text = buildDeckExportText(activeTab.cards || [], activeTab.energyTypes || []);
+        await copyDeckExportText(text);
+        if (activeMetaDeckId === deck.docId && activeDeckTabId === activeTab.id) status.textContent = "牌組文字已複製到剪貼簿";
+    } catch (error) {
+        alert(error.message || "牌組匯出失敗，請稍後再試。");
+    } finally {
+        label.textContent = "匯出牌組";
+        btnExportDeckList.disabled = false;
+    }
+});
+
 function renderMetaDeckDetail() {
     const deck = cardsData.find(c => c.docId === activeMetaDeckId);
     if (!deck) {
@@ -2445,6 +2565,7 @@ function renderMetaDeckDetail() {
     }
 
     detailDeckRows.innerHTML = "";
+    document.getElementById("deck-export-status").textContent = "";
     
     const { tabs, activeTab } = getActiveDeckTab(deck);
     const currentCards = activeTab.cards || [];

@@ -663,6 +663,12 @@ header { display: flex; justify-content: space-between; align-items: center; mar
 .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
 .modal.show { display: flex; }
 .modal-content { background: white; padding: 30px; border-radius: 12px; width: 380px; max-height: calc(100vh - 48px); overflow-y: auto; box-sizing: border-box; scrollbar-gutter: stable; position: relative; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+#deck-form-modal .modal-content, #deck-cover-form-modal .modal-content { width: 380px; height: min(640px, calc(100vh - 48px)); max-width: calc(100vw - 32px); }
+#deck-cover-form-modal .modal-content { display: flex; flex-direction: column; }
+#deck-cover-form { display: flex; flex-direction: column; flex: 1; }
+#deck-cover-form .deck-cover-save { width: 100%; min-height: 44px; margin-top: auto; flex-shrink: 0; }
+#deck-form-modal .input-group > input, #deck-cover-form-modal .input-group > input { min-height: 44px; padding: 10px 12px; font-size: 16px; box-sizing: border-box; }
+#deck-form-modal .input-group label, #deck-cover-form-modal .input-group label { font-size: 14px; }
 .modal-content::-webkit-scrollbar { width: 10px; }
 .modal-content::-webkit-scrollbar-track { background: #f1f3f5; border-radius: 10px; }
 .modal-content::-webkit-scrollbar-thumb { background: #c7cdd4; border-radius: 10px; border: 2px solid #f1f3f5; }
@@ -1104,6 +1110,10 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     flex: 1;
     margin-bottom: 0;
 }
+.meta-deck-filters { margin: 0 0 22px; }
+.meta-deck-filters .catalog-filter-row { flex-wrap: wrap; }
+.meta-deck-filters .catalog-filter-options { min-width: 0; max-width: 100%; }
+.meta-deck-filter-empty { margin: 0 0 20px; color: #777; }
 
 /* 大廳：Deck Box 網格排列 */
 .decks-grid { display: flex; flex-wrap: wrap; gap: 20px; }
@@ -1269,11 +1279,22 @@ header { display: flex; justify-content: space-between; align-items: center; mar
     gap: 30px;
     align-items: flex-start;
 }
+.deck-detail-header { margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
 .deck-detail-header-actions {
     display: flex;
     align-items: center;
     gap: 14px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    max-width: 100%;
 }
+.deck-detail-header-actions h2 { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.deck-transfer-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 124px; height: 40px; flex-shrink: 0; white-space: nowrap; }
+.deck-transfer-button img { display: block; width: 18px; height: 18px; }
+.deck-transfer-button:disabled { opacity: 0.6; cursor: wait; }
+.deck-export-status { margin: 0 0 14px; text-align: right; color: #237804; font-size: 13px; }
+.deck-export-status:empty { display: none; }
+.deck-copy-buffer { position: fixed; left: -9999px; top: 0; font-size: 16px; }
 .deck-import-textarea {
     width: 100%;
     min-height: 280px;

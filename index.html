@@ -271,6 +271,8 @@
                 class="deck-tabs-bar meta-lobby-tabs"
               ></div>
             </div>
+            <div id="meta-deck-attribute-filters" class="catalog-filter-panel meta-deck-filters" role="group" aria-label="牌組屬性篩選"></div>
+            <p id="meta-deck-filter-empty" class="meta-deck-filter-empty" hidden>此分頁沒有符合屬性的牌組</p>
             <div
               class="deck-tier-block"
               id="auto-team-block"
@@ -297,20 +299,18 @@
           </div>
 
           <div id="meta-deck-detail-view" style="display: none">
-            <div
-              style="
-                margin-bottom: 20px;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-              "
-            >
+            <div class="deck-detail-header">
               <button id="btn-back-decks" class="btn-secondary">
                 🔙 返回牌組列表
               </button>
               <div class="deck-detail-header-actions">
-                <button id="btn-import-deck-list" class="btn-secondary">
-                  匯入牌組
+                <button id="btn-import-deck-list" class="btn-secondary deck-transfer-button" type="button">
+                  <img src="vendor/lucide/import.svg" alt="" width="18" height="18" />
+                  <span>匯入牌組</span>
+                </button>
+                <button id="btn-export-deck-list" class="btn-secondary deck-transfer-button" type="button" title="複製目前分頁的牌組文字">
+                  <img src="vendor/lucide/copy.svg" alt="" width="18" height="18" />
+                  <span>匯出牌組</span>
                 </button>
                 <h2
                   id="detail-deck-title"
@@ -318,6 +318,7 @@
                 ></h2>
               </div>
             </div>
+            <p id="deck-export-status" class="deck-export-status" role="status"></p>
             <div class="deck-detail-layout">
               <div class="deck-detail-left">
                 <img
@@ -876,8 +877,7 @@
           </div>
           <button
             type="submit"
-            class="btn-primary"
-            style="width: 100%; margin-top: 10px"
+            class="btn-primary deck-cover-save"
           >
             儲存左側大卡
           </button>
